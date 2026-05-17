@@ -1,4 +1,4 @@
-package httputil
+package dock
 
 import (
 	"fmt"
@@ -26,8 +26,7 @@ func (err *httpError) Error() string {
 	return err.Status
 }
 
-// ErrorStatusCode returns the status code is it is an HTTP error.
-func ErrorStatusCode(err error) int {
+func httpErrorStatusCode(err error) int {
 	herr, ok := err.(*httpError)
 	if !ok {
 		return 0
@@ -35,8 +34,7 @@ func ErrorStatusCode(err error) int {
 	return herr.StatusCode
 }
 
-// AddErrCode adds error code to an error given the http status.
-func AddErrCode(statusCode int, err error) error {
+func httpAddErrCode(statusCode int, err error) error {
 	switch statusCode {
 	case http.StatusNotFound:
 		err = errcode.Add(errcode.NotFound, err)
@@ -48,8 +46,7 @@ func AddErrCode(statusCode int, err error) error {
 	return err
 }
 
-// RespError returns the error from an HTTP response.
-func RespError(resp *http.Response) error {
+func httpRespError(resp *http.Response) error {
 	bs, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
@@ -59,5 +56,5 @@ func RespError(resp *http.Response) error {
 		Status:     resp.Status,
 		Body:       strings.TrimSpace(string(bs)),
 	}
-	return AddErrCode(resp.StatusCode, herr)
+	return httpAddErrCode(resp.StatusCode, herr)
 }

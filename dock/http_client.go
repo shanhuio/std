@@ -1,4 +1,4 @@
-package httputil
+package dock
 
 import (
 	"bytes"
@@ -12,8 +12,8 @@ import (
 	"shanhu.io/std/errcode"
 )
 
-// Client performs calls to a remote server.
-type Client struct {
+// httpClient performs calls to a remote server.
+type httpClient struct {
 	Server    *url.URL
 	Transport http.RoundTripper
 }
@@ -43,13 +43,13 @@ func copyRespBody(resp *http.Response, w io.Writer) error {
 	return resp.Body.Close()
 }
 
-func (c *Client) doRaw(ctx context.Context, req *http.Request) (
+func (c *httpClient) doRaw(ctx context.Context, req *http.Request) (
 	*http.Response, error,
 ) {
 	return (&http.Client{Transport: c.Transport}).Do(req.WithContext(ctx))
 }
 
-func (c *Client) do(ctx context.Context, req *http.Request) (
+func (c *httpClient) do(ctx context.Context, req *http.Request) (
 	*http.Response, error,
 ) {
 	resp, err := c.doRaw(ctx, req)
@@ -58,12 +58,12 @@ func (c *Client) do(ctx context.Context, req *http.Request) (
 	}
 	if !isSuccess(resp) {
 		defer resp.Body.Close()
-		return nil, RespError(resp)
+		return nil, httpRespError(resp)
 	}
 	return resp, nil
 }
 
-func (c *Client) req(m, p string, r io.Reader) (*http.Request, error) {
+func (c *httpClient) req(m, p string, r io.Reader) (*http.Request, error) {
 	u, err := makeURL(c.Server, p)
 	if err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func (c *Client) req(m, p string, r io.Reader) (*http.Request, error) {
 	return http.NewRequest(m, u, r)
 }
 
-func (c *Client) reqJSON(m, p string, r io.Reader) (*http.Request, error) {
+func (c *httpClient) reqJSON(m, p string, r io.Reader) (*http.Request, error) {
 	req, err := c.req(m, p, r)
 	if err != nil {
 		return nil, err
@@ -80,8 +80,7 @@ func (c *Client) reqJSON(m, p string, r io.Reader) (*http.Request, error) {
 	return req, nil
 }
 
-// Put puts a stream to a path on the server.
-func (c *Client) Put(p string, r io.Reader) error {
+func (c *httpClient) put(p string, r io.Reader) error {
 	req, err := c.req(http.MethodPut, p, r)
 	if err != nil {
 		return err
@@ -93,7 +92,7 @@ func (c *Client) Put(p string, r io.Reader) error {
 	return resp.Body.Close()
 }
 
-func (c *Client) poke(ctx context.Context, m, p string) error {
+func (c *httpClient) pokeMethod(ctx context.Context, m, p string) error {
 	req, err := c.req(m, p, nil)
 	if err != nil {
 		return err
@@ -105,13 +104,11 @@ func (c *Client) poke(ctx context.Context, m, p string) error {
 	return resp.Body.Close()
 }
 
-// Poke posts a signal to the given route on the server.
-func (c *Client) Poke(p string) error {
-	return c.poke(context.TODO(), http.MethodPost, p)
+func (c *httpClient) poke(p string) error {
+	return c.pokeMethod(context.TODO(), http.MethodPost, p)
 }
 
-// Get gets a response from a route on the server.
-func (c *Client) Get(p string) (*http.Response, error) {
+func (c *httpClient) get(p string) (*http.Response, error) {
 	req, err := c.req(http.MethodGet, p, nil)
 	if err != nil {
 		return nil, err
@@ -119,10 +116,8 @@ func (c *Client) Get(p string) (*http.Response, error) {
 	return c.do(context.TODO(), req)
 }
 
-// GetInto gets the specified path and writes everything from the body to the
-// given writer.
-func (c *Client) GetInto(p string, w io.Writer) (int64, error) {
-	resp, err := c.Get(p)
+func (c *httpClient) getInto(p string, w io.Writer) (int64, error) {
+	resp, err := c.get(p)
 	if err != nil {
 		return 0, err
 	}
@@ -130,9 +125,7 @@ func (c *Client) GetInto(p string, w io.Writer) (int64, error) {
 	return io.Copy(w, resp.Body)
 }
 
-// JSONGet gets the content of a path and decodes the response
-// into resp as JSON.
-func (c *Client) JSONGet(p string, resp interface{}) error {
+func (c *httpClient) jsonGet(p string, resp interface{}) error {
 	req, err := c.reqJSON(http.MethodGet, p, nil)
 	if err != nil {
 		return nil
@@ -150,9 +143,7 @@ func (c *Client) JSONGet(p string, resp interface{}) error {
 	return httpResp.Body.Close()
 }
 
-// Post posts with request body from r, and copies the response body
-// to w.
-func (c *Client) Post(p string, r io.Reader, w io.Writer) error {
+func (c *httpClient) post(p string, r io.Reader, w io.Writer) error {
 	if r != nil {
 		r = io.NopCloser(r)
 	}
@@ -167,7 +158,7 @@ func (c *Client) Post(p string, r io.Reader, w io.Writer) error {
 	return copyRespBody(resp, w)
 }
 
-func (c *Client) jsonPost(ctx context.Context, p string, req interface{}) (
+func (c *httpClient) postJSON(ctx context.Context, p string, req interface{}) (
 	*http.Response, error,
 ) {
 	bs, err := json.Marshal(req)
@@ -181,20 +172,16 @@ func (c *Client) jsonPost(ctx context.Context, p string, req interface{}) (
 	return c.do(ctx, httpReq)
 }
 
-// JSONPost posts a JSON object as the request body and writes the body
-// into the given writer.
-func (c *Client) JSONPost(p string, req interface{}, w io.Writer) error {
-	resp, err := c.jsonPost(context.TODO(), p, req)
+func (c *httpClient) jsonPost(p string, req interface{}, w io.Writer) error {
+	resp, err := c.postJSON(context.TODO(), p, req)
 	if err != nil {
 		return err
 	}
 	return copyRespBody(resp, w)
 }
 
-// Call performs a call with the request as a marshalled JSON object,
-// and the response unmarshalled as a JSON object.
-func (c *Client) Call(p string, req, resp interface{}) error {
-	httpResp, err := c.jsonPost(context.TODO(), p, req)
+func (c *httpClient) call(p string, req, resp interface{}) error {
+	httpResp, err := c.postJSON(context.TODO(), p, req)
 	if err != nil {
 		return err
 	}
@@ -210,7 +197,6 @@ func (c *Client) Call(p string, req, resp interface{}) error {
 	return httpResp.Body.Close()
 }
 
-// Delete sends a delete message to the particular path.
-func (c *Client) Delete(p string) error {
-	return c.poke(context.TODO(), http.MethodDelete, p)
+func (c *httpClient) del(p string) error {
+	return c.pokeMethod(context.TODO(), http.MethodDelete, p)
 }

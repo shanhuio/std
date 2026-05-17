@@ -6,7 +6,6 @@ import (
 	"net/url"
 
 	"shanhu.io/std/errcode"
-	"shanhu.io/std/httputil"
 )
 
 // Cont wraps a container.
@@ -105,7 +104,7 @@ func (c *Cont) SendSIGINT() error {
 // Stop stops the container.
 func (c *Cont) Stop() error {
 	err := c.c.poke(c.path("stop"), singleQuery("t", "60"))
-	if httputil.ErrorStatusCode(err) == http.StatusNotModified {
+	if httpErrorStatusCode(err) == http.StatusNotModified {
 		return nil // already stopped
 	}
 	return err
