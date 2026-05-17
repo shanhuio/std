@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/url"
 )
 
 func unixSockSink(sinkAddr string) func(
@@ -18,5 +19,14 @@ func unixSockSink(sinkAddr string) func(
 func unixSockTransport(sockAddr string) *http.Transport {
 	return &http.Transport{
 		DialContext: unixSockSink(sockAddr),
+	}
+}
+
+// NewUnixClient creates a new client that always goes to a particular
+// unix domain socket.
+func NewUnixClient(sockAddr string) *Client {
+	return &Client{
+		Server:    &url.URL{Scheme: "http", Host: "unix.sock"},
+		Transport: unixSockTransport(sockAddr),
 	}
 }
