@@ -11,30 +11,10 @@ import (
 	"shanhu.io/std/errcode"
 )
 
-// Client performs client that calls to a remote server with an optional token.
+// Client performs calls to a remote server.
 type Client struct {
-	Server *url.URL
-
-	// TokenSource is an optional token source to proivde bearer token.
-	TokenSource TokenSource
-
-	UserAgent string // Optional User-Agent for each request.
-	Accept    string // Optional Accept header.
-
+	Server    *url.URL
 	Transport http.RoundTripper
-}
-
-func (c *Client) addAuth(req *http.Request) error {
-	if c.TokenSource == nil {
-		return nil
-	}
-	ctx := req.Context()
-	tok, err := c.TokenSource.Token(ctx, c.Transport)
-	if err != nil {
-		return errcode.Annotate(err, "get token")
-	}
-	SetAuthToken(req.Header, tok)
-	return nil
 }
 
 func (c *Client) doRaw(ctx context.Context, req *http.Request) (
@@ -62,17 +42,7 @@ func (c *Client) req(m, p string, r io.Reader) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	req, err := http.NewRequest(m, u, r)
-	if err != nil {
-		return nil, err
-	}
-	if err := c.addAuth(req); err != nil {
-		return nil, errcode.Annotate(err, "add auth to request")
-	}
-	setHeader(req.Header, "User-Agent", c.UserAgent)
-	setHeader(req.Header, "Accept", c.Accept)
-	return req, nil
+	return http.NewRequest(m, u, r)
 }
 
 func (c *Client) reqJSON(m, p string, r io.Reader) (*http.Request, error) {
@@ -86,38 +56,15 @@ func (c *Client) reqJSON(m, p string, r io.Reader) (*http.Request, error) {
 
 // Put puts a stream to a path on the server.
 func (c *Client) Put(p string, r io.Reader) error {
-	return c.PutN(p, r, -1)
-}
-
-// PutN puts a stream to a path on the server with content length
-// set to n.
-func (c *Client) PutN(p string, r io.Reader, n int64) error {
 	req, err := c.req(http.MethodPut, p, r)
 	if err != nil {
 		return err
-	}
-	if n >= 0 {
-		req.ContentLength = n
 	}
 	resp, err := c.do(context.TODO(), req)
 	if err != nil {
 		return err
 	}
 	return resp.Body.Close()
-}
-
-// PutBytes puts bytes to a path on the server.
-func (c *Client) PutBytes(p string, bs []byte) error {
-	return c.PutN(p, bytes.NewBuffer(bs), int64(len(bs)))
-}
-
-// JSONPut puts an object in JSON encoding.
-func (c *Client) JSONPut(p string, v interface{}) error {
-	bs, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	return c.PutBytes(p, bs)
 }
 
 func (c *Client) poke(ctx context.Context, m, p string) error {
@@ -130,22 +77,6 @@ func (c *Client) poke(ctx context.Context, m, p string) error {
 		return err
 	}
 	return resp.Body.Close()
-}
-
-// GetCode gets a response from a route and returns the
-// status code.
-func (c *Client) GetCode(p string) (int, error) {
-	req, err := c.req(http.MethodGet, p, nil)
-	if err != nil {
-		return 0, err
-	}
-	resp, err := c.doRaw(context.TODO(), req)
-	if err != nil {
-		return 0, err
-	}
-	code := resp.StatusCode
-	resp.Body.Close()
-	return code, nil
 }
 
 // Poke posts a signal to the given route on the server.
@@ -162,16 +93,6 @@ func (c *Client) Get(p string) (*http.Response, error) {
 	return c.do(context.TODO(), req)
 }
 
-// GetString gets the string response from a route on the server.
-func (c *Client) GetString(p string) (string, error) {
-	resp, err := c.Get(p)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	return respString(resp)
-}
-
 // GetInto gets the specified path and writes everything from the body to the
 // given writer.
 func (c *Client) GetInto(p string, w io.Writer) (int64, error) {
@@ -181,16 +102,6 @@ func (c *Client) GetInto(p string, w io.Writer) (int64, error) {
 	}
 	defer resp.Body.Close()
 	return io.Copy(w, resp.Body)
-}
-
-// GetBytes gets the byte array from a route on the server.
-func (c *Client) GetBytes(p string) ([]byte, error) {
-	resp, err := c.Get(p)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
 }
 
 // JSONGet gets the content of a path and decodes the response
@@ -254,12 +165,10 @@ func (c *Client) JSONPost(p string, req interface{}, w io.Writer) error {
 	return copyRespBody(resp, w)
 }
 
-// CallContext performs a call with the request as a marshalled JSON object,
+// Call performs a call with the request as a marshalled JSON object,
 // and the response unmarshalled as a JSON object.
-func (c *Client) CallContext(
-	ctx context.Context, p string, req, resp interface{},
-) error {
-	httpResp, err := c.jsonPost(ctx, p, req)
+func (c *Client) Call(p string, req, resp interface{}) error {
+	httpResp, err := c.jsonPost(context.TODO(), p, req)
 	if err != nil {
 		return err
 	}
@@ -273,16 +182,6 @@ func (c *Client) CallContext(
 		return errcode.Annotate(err, "decode response")
 	}
 	return httpResp.Body.Close()
-}
-
-// Call performs a CallContext with context.TODO().
-func (c *Client) Call(p string, req, resp interface{}) error {
-	return c.CallContext(context.TODO(), p, req, resp)
-}
-
-// JSONCall is an alias to Call.
-func (c *Client) JSONCall(p string, req, resp interface{}) error {
-	return c.Call(p, req, resp)
 }
 
 // Delete sends a delete message to the particular path.
