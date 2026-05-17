@@ -16,28 +16,28 @@ func dockerFrame(stream byte, payload []byte) []byte {
 
 func TestLogDispatcherRoutes(t *testing.T) {
 	for _, test := range []struct {
-		name           string
-		stream         byte
-		payload        string
-		wantStdout     string
-		wantStderr     string
+		name       string
+		stream     byte
+		payload    string
+		wantStdout string
+		wantStderr string
 	}{
 		{
-			name:    "stdout (stream 1)",
-			stream:  1,
-			payload: "hello\n",
+			name:       "stdout (stream 1)",
+			stream:     1,
+			payload:    "hello\n",
 			wantStdout: "hello\n",
 		},
 		{
-			name:    "stream 0 also stdout",
-			stream:  0,
-			payload: "out\n",
+			name:       "stream 0 also stdout",
+			stream:     0,
+			payload:    "out\n",
 			wantStdout: "out\n",
 		},
 		{
-			name:    "stderr (stream 2)",
-			stream:  2,
-			payload: "boom\n",
+			name:       "stderr (stream 2)",
+			stream:     2,
+			payload:    "boom\n",
 			wantStderr: "boom\n",
 		},
 	} {
