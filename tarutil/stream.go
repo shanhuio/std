@@ -97,6 +97,9 @@ func NewStream() *Stream {
 	return &Stream{modTime: time.Now().Truncate(time.Second)}
 }
 
+// ModTime returns the modification time used for files added to the stream.
+func (s *Stream) ModTime() time.Time { return s.modTime }
+
 // AddString adds a file of name into the stream,
 // which content is str.
 func (s *Stream) AddString(name string, m *Meta, str string) {

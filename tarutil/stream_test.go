@@ -193,7 +193,7 @@ func TestStreamModTime(t *testing.T) {
 	if got.Equal(time.Time{}) {
 		t.Errorf("modTime should be set by NewStream, got zero")
 	}
-	if !got.Equal(s.modTime) {
-		t.Errorf("modTime: got %v, want %v", got, s.modTime)
+	if want := s.ModTime(); !got.Equal(want) {
+		t.Errorf("modTime: got %v, want %v", got, want)
 	}
 }
