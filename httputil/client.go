@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 
 	"shanhu.io/std/errcode"
 )
@@ -15,6 +16,31 @@ import (
 type Client struct {
 	Server    *url.URL
 	Transport http.RoundTripper
+}
+
+func makeURL(base *url.URL, p string) (string, error) {
+	u := *base
+	up, err := url.Parse(p)
+	if err != nil {
+		return "", err
+	}
+
+	// append two paths
+	u.Path = path.Join(u.Path, up.Path)
+	u.RawQuery = up.RawQuery
+	u.Fragment = up.Fragment
+	return u.String(), nil
+}
+
+func copyRespBody(resp *http.Response, w io.Writer) error {
+	defer resp.Body.Close()
+	if w == nil {
+		return nil
+	}
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		return err
+	}
+	return resp.Body.Close()
 }
 
 func (c *Client) doRaw(ctx context.Context, req *http.Request) (
