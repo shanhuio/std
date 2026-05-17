@@ -189,11 +189,11 @@ func TestStreamModTime(t *testing.T) {
 	s := NewStream()
 	s.AddString("a.txt", ModeMeta(0644), "x")
 	entries := readTar(t, writeStream(t, s))
-	if entries[0].header.ModTime.Equal(time.Time{}) {
+	got := entries[0].header.ModTime
+	if got.Equal(time.Time{}) {
 		t.Errorf("modTime should be set by NewStream, got zero")
 	}
-	if !entries[0].header.ModTime.Equal(s.modTime.Truncate(0)) &&
-		entries[0].header.ModTime.Unix() != s.modTime.Unix() {
-		t.Errorf("modTime: got %v, want %v", entries[0].header.ModTime, s.modTime)
+	if !got.Equal(s.modTime) {
+		t.Errorf("modTime: got %v, want %v", got, s.modTime)
 	}
 }

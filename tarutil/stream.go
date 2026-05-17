@@ -9,10 +9,11 @@ import (
 	"shanhu.io/std/errcode"
 )
 
-// streamFile is a file to stream into a tar stream.
+// streamFile is a file (or a zip archive) to stream into a tar stream.
 type streamFile struct {
 	name    string // Name to write into the tar stream.
 	file    string // File to read from file system.
+	zip     bool   // If to read the file as a zip file.
 	content []byte // Raw content; used only when File is empty string.
 
 	meta Meta
@@ -31,6 +32,10 @@ type Meta struct {
 func ModeMeta(mode int64) *Meta { return &Meta{Mode: mode} }
 
 func (f *streamFile) writeTo(tw *tar.Writer) error {
+	if f.zip {
+		return TarZipFile(tw, f.file, f.name)
+	}
+
 	if f.file != "" {
 		file, err := os.Open(f.file)
 		if err != nil {
@@ -88,7 +93,9 @@ type Stream struct {
 }
 
 // NewStream create a new tar stream.
-func NewStream() *Stream { return &Stream{modTime: time.Now()} }
+func NewStream() *Stream {
+	return &Stream{modTime: time.Now().Truncate(time.Second)}
+}
 
 // AddString adds a file of name into the stream,
 // which content is str.
@@ -114,6 +121,15 @@ func (s *Stream) AddFile(name string, m *Meta, f string) {
 		file:    f,
 		meta:    *m,
 		modTime: s.modTime,
+	})
+}
+
+// AddZipFile adds a zip file into the stream.
+func (s *Stream) AddZipFile(name, f string) {
+	s.files = append(s.files, &streamFile{
+		name: name, // base directory.
+		file: f,
+		zip:  true,
 	})
 }
 
