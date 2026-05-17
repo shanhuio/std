@@ -7,7 +7,6 @@ import (
 
 	"shanhu.io/std/errcode"
 	"shanhu.io/std/httputil"
-	"shanhu.io/std/strtoken"
 )
 
 // Cont wraps a container.
@@ -28,9 +27,9 @@ func (c *Cont) path(m string) string { return contPath(c.id, m) }
 
 // Exec executes a command line. Returns the exit value or any error.
 func (c *Cont) Exec(line string) (int, error) {
-	args, errs := strtoken.Parse(line)
-	if len(errs) > 0 {
-		return 0, errs[0]
+	args, err := shellSplit(line)
+	if err != nil {
+		return 0, err
 	}
 	return c.ExecArgs(args)
 }
