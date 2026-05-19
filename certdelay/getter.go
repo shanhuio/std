@@ -30,17 +30,22 @@ type getter struct {
 	now     func() time.Time
 	sleep   func(d time.Duration)
 
-	mu     sync.Mutex
-	certs  map[string]*timeEntry
-	manual map[string]*tls.Certificate
+	newCertDelay  time.Duration
+	newCertMature time.Duration
+
+	mu             sync.Mutex
+	certs          map[string]*timeEntry
+	certForDomain  func(domain string) *tls.Certificate
 
 	cleanUpTimer *gapper
 }
 
 type getterConfig struct {
-	manualCerts map[string]*tls.Certificate
-	now         func() time.Time
-	sleep       func(d time.Duration)
+	certForDomain func(domain string) *tls.Certificate
+	now           func() time.Time
+	sleep         func(d time.Duration)
+	newCertDelay  time.Duration
+	newCertMature time.Duration
 }
 
 func newGetter(f HelloCertFunc, config *getterConfig) *getter {
@@ -50,6 +55,15 @@ func newGetter(f HelloCertFunc, config *getterConfig) *getter {
 		sleep = time.Sleep
 	}
 
+	delay := config.newCertDelay
+	if delay == 0 {
+		delay = defaultNewCertDelay
+	}
+	mature := config.newCertMature
+	if mature == 0 {
+		mature = defaultNewCertMature
+	}
+
 	const cleanUpPeriod = time.Hour
 
 	return &getter{
@@ -57,8 +71,11 @@ func newGetter(f HelloCertFunc, config *getterConfig) *getter {
 		now:     now,
 		sleep:   sleep,
 
-		certs:  make(map[string]*timeEntry),
-		manual: config.manualCerts,
+		newCertDelay:  delay,
+		newCertMature: mature,
+
+		certs:         make(map[string]*timeEntry),
+		certForDomain: config.certForDomain,
 
 		cleanUpTimer: newGapperNow(cleanUpPeriod, now()),
 	}
@@ -88,13 +105,13 @@ func (g *getter) cleanUp() {
 	}
 }
 
-// getterDelay is the time dealy of the return of the certificate if the
-// certificate is new.
-const getterDelay = 2 * time.Second
+// defaultNewCertDelay is the default delay applied to the return of a newly
+// issued certificate.
+const defaultNewCertDelay = 2 * time.Second
 
-// getterMature is the age where there will be no more delaying on new
-// certificates.
-const getterMature = 3 * time.Second
+// defaultNewCertMature is the default age after which no more delaying is
+// applied to a newly issued certificate.
+const defaultNewCertMature = 3 * time.Second
 
 func (g *getter) delayUnlessMature(cert *x509.Certificate, now time.Time) {
 	// We use the SerialNumber as the key here. This assumes that all the
@@ -107,13 +124,13 @@ func (g *getter) delayUnlessMature(cert *x509.Certificate, now time.Time) {
 
 	entry, ok := g.certs[k]
 	if !ok {
-		g.sleep(getterDelay)
+		g.sleep(g.newCertDelay)
 		g.certs[k] = &timeEntry{
-			mature: now.Add(getterMature),
+			mature: now.Add(g.newCertMature),
 			expire: cert.NotAfter,
 		}
 	} else if now.Before(entry.mature) {
-		g.sleep(getterDelay)
+		g.sleep(g.newCertDelay)
 	}
 }
 
@@ -135,9 +152,9 @@ func (g *getter) maybeDelay(cert *x509.Certificate) {
 func (g *getter) get(hello *tls.ClientHelloInfo) (
 	*tls.Certificate, error,
 ) {
-	if g.manual != nil {
+	if g.certForDomain != nil {
 		name := strings.TrimSuffix(hello.ServerName, ".")
-		if cert, ok := g.manual[name]; ok {
+		if cert := g.certForDomain(name); cert != nil {
 			return cert, nil
 		}
 	}
@@ -152,18 +169,3 @@ func (g *getter) get(hello *tls.ClientHelloInfo) (
 	return cert, nil
 }
 
-func wrapAutoCert(f HelloCertFunc, config *getterConfig) HelloCertFunc {
-	g := newGetter(f, config)
-	return g.get
-}
-
-// WrapAutoCert wraps the GetCertificate function. The resulting function adds
-// a small delay of several seconds for the first time a certificate is
-// requested, so that newly issued certificates won't be rejected upright by
-// strict browsers on failed SCT timestamps checking due to clock skews.
-// Optinally, a map of manual certificates can be used for a set of domains.
-func WrapAutoCert(
-	f HelloCertFunc, manualCerts map[string]*tls.Certificate,
-) HelloCertFunc {
-	return wrapAutoCert(f, &getterConfig{manualCerts: manualCerts})
-}

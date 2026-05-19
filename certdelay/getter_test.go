@@ -34,41 +34,41 @@ func TestGetter(t *testing.T) {
 	}
 
 	start := now
-	get := wrapAutoCert(f, config)
+	g := newGetter(f, config)
 	hello := &tls.ClientHelloInfo{ServerName: "example.com"}
-	if _, err := get(hello); err != nil {
+	if _, err := g.get(hello); err != nil {
 		t.Fatal("get certificate: ", err)
 	}
 
-	atLeast := start.Add(getterDelay)
+	atLeast := start.Add(defaultNewCertDelay)
 	if now.Before(atLeast) {
 		t.Errorf(
 			"should have delayed to +%s, but at +%s",
-			getterDelay, now.Sub(start),
+			defaultNewCertDelay, now.Sub(start),
 		)
 	}
 
 	// get again
-	atLeast = now.Add(getterDelay)
+	atLeast = now.Add(defaultNewCertDelay)
 	before := now
-	if _, err := get(hello); err != nil {
+	if _, err := g.get(hello); err != nil {
 		t.Fatal("get certificate: ", err)
 	}
 	if now.Before(atLeast) {
 		t.Errorf(
 			"should have delayed to +%s, but at +%s",
-			getterDelay, now.Sub(before),
+			defaultNewCertDelay, now.Sub(before),
 		)
 	}
 
-	mature := start.Add(getterMature)
+	mature := start.Add(defaultNewCertMature)
 	if now.Before(mature) {
 		now = mature
 	}
 
 	// get again, this time after it is matured.
 	before = now
-	if _, err := get(hello); err != nil {
+	if _, err := g.get(hello); err != nil {
 		t.Fatal("get certificate: ", err)
 	}
 	if now.After(before) {
