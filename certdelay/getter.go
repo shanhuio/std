@@ -32,10 +32,11 @@ type getter struct {
 
 	newCertDelay  time.Duration
 	newCertMature time.Duration
+	newCertWindow time.Duration
 
-	mu             sync.Mutex
-	certs          map[string]*timeEntry
-	certForDomain  func(domain string) *tls.Certificate
+	mu            sync.Mutex
+	certs         map[string]*timeEntry
+	certForDomain func(domain string) *tls.Certificate
 
 	cleanUpTimer *gapper
 }
@@ -46,6 +47,7 @@ type getterConfig struct {
 	sleep         func(d time.Duration)
 	newCertDelay  time.Duration
 	newCertMature time.Duration
+	newCertWindow time.Duration
 }
 
 func newGetter(f HelloCertFunc, config *getterConfig) *getter {
@@ -63,6 +65,10 @@ func newGetter(f HelloCertFunc, config *getterConfig) *getter {
 	if mature == 0 {
 		mature = DefaultNewCertMature
 	}
+	window := config.newCertWindow
+	if window == 0 {
+		window = DefaultNewCertWindow
+	}
 
 	const cleanUpPeriod = time.Hour
 
@@ -73,6 +79,7 @@ func newGetter(f HelloCertFunc, config *getterConfig) *getter {
 
 		newCertDelay:  delay,
 		newCertMature: mature,
+		newCertWindow: window,
 
 		certs:         make(map[string]*timeEntry),
 		certForDomain: config.certForDomain,
@@ -113,6 +120,10 @@ const DefaultNewCertDelay = 2 * time.Second
 // applied to a newly issued certificate.
 const DefaultNewCertMature = 3 * time.Second
 
+// DefaultNewCertWindow is the default window within which a certificate's
+// NotBefore is considered recent enough to warrant the delay treatment.
+const DefaultNewCertWindow = 2 * time.Hour
+
 // trackCert records the cert under its serial-number key if not already
 // known, and reports whether the request should be delayed.
 func (g *getter) trackCert(cert *x509.Certificate, now time.Time) bool {
@@ -144,10 +155,9 @@ func (g *getter) delayUnlessMature(cert *x509.Certificate, now time.Time) {
 
 func (g *getter) maybeDelay(cert *x509.Certificate) {
 	now := g.now()
-	const oldCertDuration = 2 * time.Hour
-	if cert.NotBefore.Before(now.Add(-oldCertDuration)) {
-		// If the cert's start time is more than oldCertDuration, then this is
-		// not likely a new certificate.
+	if cert.NotBefore.Before(now.Add(-g.newCertWindow)) {
+		// If the cert's start time is more than newCertWindow ago, then this
+		// is not likely a new certificate.
 		return
 	}
 

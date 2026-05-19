@@ -18,6 +18,12 @@ type Delayer struct {
 	// skip the delay. Zero falls back to DefaultNewCertMature.
 	NewCertMature time.Duration
 
+	// NewCertWindow is the window after a cert's NotBefore during which it
+	// is considered recent enough to warrant the delay treatment. Certs
+	// whose NotBefore is older than this never get delayed. Zero falls back
+	// to DefaultNewCertWindow.
+	NewCertWindow time.Duration
+
 	// CertForDomain, when non-nil, is consulted first for each request;
 	// when it returns nil, the request falls through to the wrapped
 	// HelloCertFunc.
@@ -28,6 +34,7 @@ func (d *Delayer) toGetterConfig() *getterConfig {
 	return &getterConfig{
 		newCertDelay:  d.NewCertDelay,
 		newCertMature: d.NewCertMature,
+		newCertWindow: d.NewCertWindow,
 		certForDomain: d.CertForDomain,
 	}
 }

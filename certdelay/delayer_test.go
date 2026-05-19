@@ -21,6 +21,7 @@ func TestDelayerToGetterConfig(t *testing.T) {
 			d: Delayer{
 				NewCertDelay:  5 * time.Second,
 				NewCertMature: 7 * time.Second,
+				NewCertWindow: 4 * time.Hour,
 			},
 		},
 		{
@@ -33,6 +34,7 @@ func TestDelayerToGetterConfig(t *testing.T) {
 			d: Delayer{
 				NewCertDelay:  5 * time.Second,
 				NewCertMature: 7 * time.Second,
+				NewCertWindow: 4 * time.Hour,
 				CertForDomain: withCert,
 			},
 			wantCertHit: true,
@@ -50,6 +52,12 @@ func TestDelayerToGetterConfig(t *testing.T) {
 				t.Errorf(
 					"newCertMature: got %v, want %v",
 					got.newCertMature, c.d.NewCertMature,
+				)
+			}
+			if got.newCertWindow != c.d.NewCertWindow {
+				t.Errorf(
+					"newCertWindow: got %v, want %v",
+					got.newCertWindow, c.d.NewCertWindow,
 				)
 			}
 			if c.wantCertHit {
