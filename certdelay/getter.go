@@ -21,12 +21,12 @@ type timeEntry struct {
 	expire time.Time // After this time, will be cleaned up.
 }
 
-// HelloCertFunc is the function that gets TLS certificate based on the
+// GetCertificateFunc is the function that gets TLS certificate based on the
 // HelloInfo.
-type HelloCertFunc func(hello *tls.ClientHelloInfo) (*tls.Certificate, error)
+type GetCertificateFunc func(hello *tls.ClientHelloInfo) (*tls.Certificate, error)
 
 type getter struct {
-	getFunc HelloCertFunc
+	getFunc GetCertificateFunc
 	now     func() time.Time
 	sleep   func(d time.Duration)
 
@@ -50,7 +50,7 @@ type getterConfig struct {
 	newCertWindow time.Duration
 }
 
-func newGetter(f HelloCertFunc, config *getterConfig) *getter {
+func newGetter(f GetCertificateFunc, config *getterConfig) *getter {
 	now := nowFunc(config.now)
 	sleep := config.sleep
 	if sleep == nil {

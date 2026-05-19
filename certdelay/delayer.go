@@ -26,7 +26,7 @@ type Delayer struct {
 
 	// CertForDomain, when non-nil, is consulted first for each request;
 	// when it returns nil, the request falls through to the wrapped
-	// HelloCertFunc.
+	// GetCertificateFunc.
 	CertForDomain func(domain string) *tls.Certificate
 }
 
@@ -39,9 +39,9 @@ func (d *Delayer) toGetterConfig() *getterConfig {
 	}
 }
 
-// Wrap wraps f with a getter configured from d. A zero NewCertDelay or
-// NewCertMature falls back to the package default.
-func (d *Delayer) Wrap(f HelloCertFunc) HelloCertFunc {
+// Wrap returns f wrapped to apply d's delay behavior to newly issued
+// certificates.
+func (d *Delayer) Wrap(f GetCertificateFunc) GetCertificateFunc {
 	g := newGetter(f, d.toGetterConfig())
 	return g.get
 }
