@@ -10,12 +10,12 @@ type Delayer struct {
 	// NewCertDelay is how long to stall the response the first time a newly
 	// issued certificate is requested. The delay gives logs of certificate
 	// transparency time to catch up so strict browsers don't reject the cert
-	// on SCT timestamp checks. Zero means the package default.
+	// on SCT timestamp checks. Zero falls back to DefaultNewCertDelay.
 	NewCertDelay time.Duration
 
 	// NewCertMature is how long after a cert is first seen before it stops
 	// being treated as new; once the cert is "mature", subsequent requests
-	// skip the delay. Zero means the package default.
+	// skip the delay. Zero falls back to DefaultNewCertMature.
 	NewCertMature time.Duration
 
 	// CertForDomain, when non-nil, is consulted first for each request;

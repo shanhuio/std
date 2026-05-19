@@ -40,16 +40,16 @@ func TestGetter(t *testing.T) {
 		t.Fatal("get certificate: ", err)
 	}
 
-	atLeast := start.Add(defaultNewCertDelay)
+	atLeast := start.Add(DefaultNewCertDelay)
 	if now.Before(atLeast) {
 		t.Errorf(
 			"should have delayed to +%s, but at +%s",
-			defaultNewCertDelay, now.Sub(start),
+			DefaultNewCertDelay, now.Sub(start),
 		)
 	}
 
 	// get again
-	atLeast = now.Add(defaultNewCertDelay)
+	atLeast = now.Add(DefaultNewCertDelay)
 	before := now
 	if _, err := g.get(hello); err != nil {
 		t.Fatal("get certificate: ", err)
@@ -57,11 +57,11 @@ func TestGetter(t *testing.T) {
 	if now.Before(atLeast) {
 		t.Errorf(
 			"should have delayed to +%s, but at +%s",
-			defaultNewCertDelay, now.Sub(before),
+			DefaultNewCertDelay, now.Sub(before),
 		)
 	}
 
-	mature := start.Add(defaultNewCertMature)
+	mature := start.Add(DefaultNewCertMature)
 	if now.Before(mature) {
 		now = mature
 	}

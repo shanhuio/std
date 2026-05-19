@@ -57,11 +57,11 @@ func newGetter(f HelloCertFunc, config *getterConfig) *getter {
 
 	delay := config.newCertDelay
 	if delay == 0 {
-		delay = defaultNewCertDelay
+		delay = DefaultNewCertDelay
 	}
 	mature := config.newCertMature
 	if mature == 0 {
-		mature = defaultNewCertMature
+		mature = DefaultNewCertMature
 	}
 
 	const cleanUpPeriod = time.Hour
@@ -105,13 +105,13 @@ func (g *getter) cleanUp() {
 	}
 }
 
-// defaultNewCertDelay is the default delay applied to the return of a newly
+// DefaultNewCertDelay is the default delay applied to the return of a newly
 // issued certificate.
-const defaultNewCertDelay = 2 * time.Second
+const DefaultNewCertDelay = 2 * time.Second
 
-// defaultNewCertMature is the default age after which no more delaying is
+// DefaultNewCertMature is the default age after which no more delaying is
 // applied to a newly issued certificate.
-const defaultNewCertMature = 3 * time.Second
+const DefaultNewCertMature = 3 * time.Second
 
 func (g *getter) delayUnlessMature(cert *x509.Certificate, now time.Time) {
 	// We use the SerialNumber as the key here. This assumes that all the
