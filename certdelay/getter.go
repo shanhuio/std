@@ -113,7 +113,9 @@ const DefaultNewCertDelay = 2 * time.Second
 // applied to a newly issued certificate.
 const DefaultNewCertMature = 3 * time.Second
 
-func (g *getter) delayUnlessMature(cert *x509.Certificate, now time.Time) {
+// trackCert records the cert under its serial-number key if not already
+// known, and reports whether the request should be delayed.
+func (g *getter) trackCert(cert *x509.Certificate, now time.Time) bool {
 	// We use the SerialNumber as the key here. This assumes that all the
 	// certificates are issued by the same issuer, and the issuer uses
 	// unique serial numbers for certificates.
@@ -124,12 +126,18 @@ func (g *getter) delayUnlessMature(cert *x509.Certificate, now time.Time) {
 
 	entry, ok := g.certs[k]
 	if !ok {
-		g.sleep(g.newCertDelay)
 		g.certs[k] = &timeEntry{
 			mature: now.Add(g.newCertMature),
 			expire: cert.NotAfter,
 		}
-	} else if now.Before(entry.mature) {
+		return true
+	}
+	return now.Before(entry.mature)
+}
+
+func (g *getter) delayUnlessMature(cert *x509.Certificate, now time.Time) {
+	needDelay := g.trackCert(cert, now)
+	if needDelay {
 		g.sleep(g.newCertDelay)
 	}
 }
