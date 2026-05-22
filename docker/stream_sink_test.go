@@ -166,6 +166,53 @@ func TestProgressPrinterEmptyMessage(t *testing.T) {
 	}
 }
 
+func TestStreamSinkEmpty(t *testing.T) {
+	s := newStreamSink()
+	if err := s.waitDone(); err != nil {
+		t.Errorf("waitDone: got %v, want nil", err)
+	}
+}
+
+func TestStreamSinkStream(t *testing.T) {
+	s := newStreamSink()
+	if _, err := s.Write([]byte(`{"stream":"Step 1\n"}`)); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := s.waitDone(); err != nil {
+		t.Errorf("waitDone: got %v, want nil", err)
+	}
+}
+
+func TestStreamSinkError(t *testing.T) {
+	s := newStreamSink()
+	if _, err := s.Write([]byte(`{"error":"boom"}`)); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	err := s.waitDone()
+	if err == nil {
+		t.Fatal("waitDone: got nil, want error")
+	}
+	if !errcode.IsInternal(err) {
+		t.Errorf("waitDone: got %v, want internal", err)
+	}
+	if !strings.Contains(err.Error(), "boom") {
+		t.Errorf("waitDone: %q does not contain 'boom'", err)
+	}
+}
+
+func TestStreamSinkMultiWrite(t *testing.T) {
+	s := newStreamSink()
+	msg := `{"stream":"part one\n"}{"stream":"part two\n"}`
+	for _, c := range msg {
+		if _, err := s.Write([]byte{byte(c)}); err != nil {
+			t.Fatalf("Write: %v", err)
+		}
+	}
+	if err := s.waitDone(); err != nil {
+		t.Errorf("waitDone: got %v, want nil", err)
+	}
+}
+
 func TestProgressPrinterProgressDetail(t *testing.T) {
 	var out bytes.Buffer
 	p := &progressPrinter{out: &out}
