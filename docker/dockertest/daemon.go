@@ -4,16 +4,12 @@ package dockertest
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
-	"slices"
-	"strings"
-	"sync"
 
 	"shanhu.io/std/docker"
 )
@@ -34,13 +30,7 @@ type FakeDaemon struct {
 	// Client is a docker.Client wired to talk to this fake daemon.
 	Client *docker.Client
 
-	mu      sync.Mutex
-	version docker.VersionInfo
-	conts   []*Container
-	nets    []*Network
-	vols    []*Volume
-	imgs    []*Image
-	errs    []error
+	data *daemonData
 }
 
 // New starts a FakeDaemon listening on a unix socket inside a temporary
@@ -65,6 +55,7 @@ func New() (*FakeDaemon, error) {
 		tmpDir:   tmpDir,
 		SockPath: sockPath,
 		Client:   docker.NewUnixClient(sockPath),
+		data:     &daemonData{},
 	}
 	d.registerRoutes()
 	go func() { _ = srv.Serve(l) }()
@@ -84,28 +75,31 @@ func (d *FakeDaemon) Close() error {
 // Err returns the joined internal errors recorded by the fake daemon, or
 // nil if none have been recorded. Typically checked via a deferred call at
 // the end of a test.
-func (d *FakeDaemon) Err() error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if len(d.errs) == 0 {
-		return nil
-	}
-	return errors.Join(d.errs...)
-}
+func (d *FakeDaemon) Err() error { return d.data.err() }
 
-func (d *FakeDaemon) recordErr(err error) {
-	if err == nil {
-		return
-	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.errs = append(d.errs, err)
-}
+// SetVersion sets the version info returned by GET /version.
+func (d *FakeDaemon) SetVersion(v docker.VersionInfo) { d.data.setVersion(v) }
+
+// AddContainer adds c to the set of containers known to the fake daemon. The
+// pointer is stored as-is; later mutations to *c are visible to the fake.
+func (d *FakeDaemon) AddContainer(c *Container) { d.data.addContainer(c) }
+
+// AddNetwork adds n to the set of networks known to the fake daemon. The
+// pointer is stored as-is; later mutations to *n are visible to the fake.
+func (d *FakeDaemon) AddNetwork(n *Network) { d.data.addNetwork(n) }
+
+// AddVolume adds v to the set of volumes known to the fake daemon. The
+// pointer is stored as-is; later mutations to *v are visible to the fake.
+func (d *FakeDaemon) AddVolume(v *Volume) { d.data.addVolume(v) }
+
+// AddImage adds img to the set of images known to the fake daemon. The
+// pointer is stored as-is; later mutations to *img are visible to the fake.
+func (d *FakeDaemon) AddImage(img *Image) { d.data.addImage(img) }
 
 // writeJSON wraps the package-level writeJSON, recording any encode error
-// via recordErr.
+// via the data's error recorder.
 func (d *FakeDaemon) writeJSON(w http.ResponseWriter, body any) {
-	d.recordErr(writeJSON(w, body))
+	d.data.recordErr(writeJSON(w, body))
 }
 
 func (d *FakeDaemon) handle(method, p string, h http.HandlerFunc) {
@@ -118,136 +112,17 @@ func (d *FakeDaemon) registerRoutes() {
 	d.handle("GET", "version", d.serveVersion)
 	d.handle("GET", "containers/json", d.serveListContainers)
 	d.handle("GET", "containers/{id}/json", d.serveInspectContainer)
+	d.handle("POST", "containers/create", d.serveCreateContainer)
+	d.handle("POST", "containers/{id}/rename", d.serveRenameContainer)
 	d.handle("GET", "networks/{name}", d.serveInspectNetwork)
+	d.handle("POST", "networks/create", d.serveCreateNetwork)
 	d.handle("GET", "volumes", d.serveListVolumes)
 	d.handle("GET", "volumes/{name}", d.serveInspectVolume)
+	d.handle("POST", "volumes/create", d.serveCreateVolume)
 	d.handle("GET", "images/json", d.serveListImages)
 	d.handle("GET", "images/{name}/json", d.serveInspectImage)
-}
-
-// SetVersion sets the version info returned by GET /version.
-func (d *FakeDaemon) SetVersion(v docker.VersionInfo) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.version = v
-}
-
-func (d *FakeDaemon) getVersion() docker.VersionInfo {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.version
-}
-
-// AddContainer adds c to the set of containers known to the fake daemon. The
-// pointer is stored as-is; later mutations to *c are visible to the fake.
-func (d *FakeDaemon) AddContainer(c *Container) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.conts = append(d.conts, c)
-}
-
-// getContainer returns the container matching idOrName by ID or by any of
-// its Names, or nil if none match. Container names are stored Docker-style
-// with a leading "/"; lookup accepts either form.
-func (d *FakeDaemon) getContainer(idOrName string) *Container {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	needle := strings.TrimPrefix(idOrName, "/")
-	for _, c := range d.conts {
-		if c.ID == idOrName {
-			return c
-		}
-		for _, n := range c.Names {
-			if strings.TrimPrefix(n, "/") == needle {
-				return c
-			}
-		}
-	}
-	return nil
-}
-
-// AddNetwork adds n to the set of networks known to the fake daemon. The
-// pointer is stored as-is; later mutations to *n are visible to the fake.
-func (d *FakeDaemon) AddNetwork(n *Network) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.nets = append(d.nets, n)
-}
-
-// getNetwork returns the network matching nameOrID by Name or ID, or nil if
-// none match.
-func (d *FakeDaemon) getNetwork(nameOrID string) *Network {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	for _, n := range d.nets {
-		if n.Name == nameOrID || n.ID == nameOrID {
-			return n
-		}
-	}
-	return nil
-}
-
-// AddVolume adds v to the set of volumes known to the fake daemon. The
-// pointer is stored as-is; later mutations to *v are visible to the fake.
-func (d *FakeDaemon) AddVolume(v *Volume) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.vols = append(d.vols, v)
-}
-
-// getVolume returns the volume matching name, or nil if none match.
-func (d *FakeDaemon) getVolume(name string) *Volume {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	for _, v := range d.vols {
-		if v.Name == name {
-			return v
-		}
-	}
-	return nil
-}
-
-func (d *FakeDaemon) getVolumes(wantLabels []string) []*docker.VolumeInfo {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	matched := make([]*docker.VolumeInfo, 0, len(d.vols))
-	for _, v := range d.vols {
-		if matchesAllLabels(v.Labels, wantLabels) {
-			matched = append(matched, v.toInfo())
-		}
-	}
-	return matched
-}
-
-// AddImage adds img to the set of images known to the fake daemon. The
-// pointer is stored as-is; later mutations to *img are visible to the fake.
-func (d *FakeDaemon) AddImage(img *Image) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.imgs = append(d.imgs, img)
-}
-
-func (d *FakeDaemon) getImages() []*docker.ImageListInfo {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	out := make([]*docker.ImageListInfo, 0, len(d.imgs))
-	for _, img := range d.imgs {
-		out = append(out, img.toListInfo())
-	}
-	return out
-}
-
-// getImage returns the image matching nameOrID by ID or by any of its
-// RepoTags, or nil if none match.
-func (d *FakeDaemon) getImage(nameOrID string) *Image {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	for _, img := range d.imgs {
-		if img.ID == nameOrID || slices.Contains(img.RepoTags, nameOrID) {
-			return img
-		}
-	}
-	return nil
+	d.handle("POST", "images/{name}/tag", d.serveTagImage)
+	d.handle("POST", "images/prune", d.servePruneImages)
 }
 
 func (d *FakeDaemon) servePing(w http.ResponseWriter, _ *http.Request) {
@@ -255,19 +130,7 @@ func (d *FakeDaemon) servePing(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (d *FakeDaemon) serveVersion(w http.ResponseWriter, _ *http.Request) {
-	d.writeJSON(w, d.getVersion())
-}
-
-func (d *FakeDaemon) getContainers(wantLabels []string) []*docker.ContListInfo {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	matched := make([]*docker.ContListInfo, 0, len(d.conts))
-	for _, c := range d.conts {
-		if matchesAllLabels(c.Labels, wantLabels) {
-			matched = append(matched, c.toListInfo())
-		}
-	}
-	return matched
+	d.writeJSON(w, d.data.getVersion())
 }
 
 func (d *FakeDaemon) serveListContainers(w http.ResponseWriter, r *http.Request) {
@@ -278,23 +141,12 @@ func (d *FakeDaemon) serveListContainers(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	matched := d.getContainers(filters["label"])
-	d.writeJSON(w, matched)
-}
-
-func (d *FakeDaemon) serveInspectNetwork(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	n := d.getNetwork(name)
-	if n == nil {
-		writeNotFound(w, fmt.Sprintf("network %s not found", name))
-		return
-	}
-	d.writeJSON(w, n.toInfo())
+	d.writeJSON(w, d.data.getContainers(filters["label"]))
 }
 
 func (d *FakeDaemon) serveInspectContainer(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	c := d.getContainer(id)
+	c := d.data.getContainer(id)
 	if c == nil {
 		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
 		return
@@ -302,14 +154,68 @@ func (d *FakeDaemon) serveInspectContainer(w http.ResponseWriter, r *http.Reques
 	d.writeJSON(w, c.toInfo())
 }
 
-func (d *FakeDaemon) serveInspectVolume(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	v := d.getVolume(name)
-	if v == nil {
-		writeNotFound(w, fmt.Sprintf("get %s: no such volume", name))
+func (d *FakeDaemon) serveCreateContainer(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Image    string
+		Hostname string
+		Labels   map[string]string
+	}
+	if !readJSON(w, r, &req) {
 		return
 	}
-	d.writeJSON(w, v.toInfo())
+	name := r.URL.Query().Get("name")
+
+	id := d.data.nextID("cont")
+	c := &Container{
+		ID:       id,
+		Image:    req.Image,
+		Hostname: req.Hostname,
+		Labels:   req.Labels,
+	}
+	if name != "" {
+		c.Names = []string{"/" + name}
+	}
+	d.data.addContainer(c)
+
+	d.writeJSON(w, struct {
+		ID string `json:"Id"`
+	}{ID: id})
+}
+
+func (d *FakeDaemon) serveRenameContainer(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	newName := r.URL.Query().Get("name")
+	if !d.data.renameContainer(id, newName) {
+		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (d *FakeDaemon) serveInspectNetwork(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	n := d.data.getNetwork(name)
+	if n == nil {
+		writeNotFound(w, fmt.Sprintf("network %s not found", name))
+		return
+	}
+	d.writeJSON(w, n.toInfo())
+}
+
+func (d *FakeDaemon) serveCreateNetwork(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	id := d.data.nextID("net")
+	d.data.addNetwork(&Network{ID: id, Name: req.Name})
+
+	d.writeJSON(w, struct {
+		ID      string `json:"Id"`
+		Warning string
+	}{ID: id})
 }
 
 func (d *FakeDaemon) serveListVolumes(w http.ResponseWriter, r *http.Request) {
@@ -320,23 +226,73 @@ func (d *FakeDaemon) serveListVolumes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	matched := d.getVolumes(filters["label"])
 	resp := struct {
 		Volumes []*docker.VolumeInfo
-	}{Volumes: matched}
+	}{Volumes: d.data.getVolumes(filters["label"])}
 	d.writeJSON(w, resp)
 }
 
+func (d *FakeDaemon) serveInspectVolume(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	v := d.data.getVolume(name)
+	if v == nil {
+		writeNotFound(w, fmt.Sprintf("get %s: no such volume", name))
+		return
+	}
+	d.writeJSON(w, v.toInfo())
+}
+
+func (d *FakeDaemon) serveCreateVolume(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name   string
+		Driver string
+		Labels map[string]string
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	driver := req.Driver
+	if driver == "" {
+		driver = "local"
+	}
+	v := &Volume{
+		Name:       req.Name,
+		Driver:     driver,
+		Mountpoint: "/var/lib/docker/volumes/" + req.Name + "/_data",
+		Labels:     req.Labels,
+	}
+	d.data.addVolume(v)
+
+	d.writeJSON(w, v.toInfo())
+}
+
 func (d *FakeDaemon) serveListImages(w http.ResponseWriter, _ *http.Request) {
-	d.writeJSON(w, d.getImages())
+	d.writeJSON(w, d.data.getImages())
 }
 
 func (d *FakeDaemon) serveInspectImage(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	img := d.getImage(name)
+	img := d.data.getImage(name)
 	if img == nil {
 		writeNotFound(w, fmt.Sprintf("No such image: %s", name))
 		return
 	}
 	d.writeJSON(w, img.toInfo())
+}
+
+func (d *FakeDaemon) serveTagImage(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	repo := r.URL.Query().Get("repo")
+	tag := r.URL.Query().Get("tag")
+	if !d.data.addImageTag(name, repo+":"+tag) {
+		writeNotFound(w, fmt.Sprintf("No such image: %s", name))
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (d *FakeDaemon) servePruneImages(w http.ResponseWriter, _ *http.Request) {
+	// Real Docker reports deleted images and reclaimed space; the dock
+	// client decodes into struct{}, so an empty JSON object suffices.
+	d.writeJSON(w, struct{}{})
 }

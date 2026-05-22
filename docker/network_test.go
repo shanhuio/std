@@ -77,3 +77,20 @@ func TestInspectNetwork(t *testing.T) {
 		}
 	})
 }
+
+func TestCreateNetwork(t *testing.T) {
+	d := newDaemon(t)
+	if err := docker.CreateNetwork(d.Client, "frontend"); err != nil {
+		t.Fatalf("CreateNetwork: %v", err)
+	}
+	got, err := docker.InspectNetwork(d.Client, "frontend")
+	if err != nil {
+		t.Fatalf("InspectNetwork: %v", err)
+	}
+	if got.Name != "frontend" {
+		t.Errorf("Name: got %q, want %q", got.Name, "frontend")
+	}
+	if got.ID == "" {
+		t.Errorf("ID: empty, want non-empty")
+	}
+}

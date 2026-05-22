@@ -158,3 +158,60 @@ func TestInspectImage(t *testing.T) {
 		}
 	})
 }
+
+func TestTagImage(t *testing.T) {
+	t.Run("by id", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddImage(&dockertest.Image{
+			ID:       "sha256:nginxid",
+			RepoTags: []string{"nginx:latest"},
+		})
+		if err := docker.TagImage(d.Client, "sha256:nginxid", "nginx", "1.25"); err != nil {
+			t.Fatalf("TagImage: %v", err)
+		}
+		got, err := docker.InspectImage(d.Client, "nginx:1.25")
+		if err != nil {
+			t.Fatalf("InspectImage by new tag: %v", err)
+		}
+		if got.ID != "sha256:nginxid" {
+			t.Errorf("ID: got %q, want %q", got.ID, "sha256:nginxid")
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		d := newDaemon(t)
+		err := docker.TagImage(d.Client, "missing", "nginx", "1.25")
+		if err == nil {
+			t.Fatal("TagImage: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+
+	t.Run("empty repo", func(t *testing.T) {
+		d := newDaemon(t)
+		err := docker.TagImage(d.Client, "nginx:latest", "", "1.25")
+		if err == nil {
+			t.Fatal("TagImage with empty repo: expected error, got nil")
+		}
+	})
+
+	t.Run("empty tag", func(t *testing.T) {
+		d := newDaemon(t)
+		err := docker.TagImage(d.Client, "nginx:latest", "nginx", "")
+		if err == nil {
+			t.Fatal("TagImage with empty tag: expected error, got nil")
+		}
+	})
+}
+
+func TestPruneImages(t *testing.T) {
+	d := newDaemon(t)
+	if err := docker.PruneImages(d.Client, &docker.PruneImagesOption{}); err != nil {
+		t.Fatalf("PruneImages: %v", err)
+	}
+	if err := docker.PruneImages(d.Client, &docker.PruneImagesOption{Unused: true}); err != nil {
+		t.Fatalf("PruneImages(Unused): %v", err)
+	}
+}

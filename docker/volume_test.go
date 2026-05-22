@@ -151,3 +151,62 @@ func TestInspectVolume(t *testing.T) {
 		}
 	})
 }
+
+func TestCreateVolume(t *testing.T) {
+	t.Run("basic", func(t *testing.T) {
+		d := newDaemon(t)
+		name, err := docker.CreateVolume(d.Client, "data", &docker.VolumeConfig{
+			Labels: map[string]string{"role": "frontend"},
+		})
+		if err != nil {
+			t.Fatalf("CreateVolume: %v", err)
+		}
+		if name != "data" {
+			t.Errorf("name: got %q, want %q", name, "data")
+		}
+		got, err := docker.InspectVolume(d.Client, "data")
+		if err != nil {
+			t.Fatalf("InspectVolume: %v", err)
+		}
+		if got.Labels["role"] != "frontend" {
+			t.Errorf("Labels: got %+v", got.Labels)
+		}
+	})
+
+	t.Run("nil config", func(t *testing.T) {
+		d := newDaemon(t)
+		name, err := docker.CreateVolume(d.Client, "data", nil)
+		if err != nil {
+			t.Fatalf("CreateVolume: %v", err)
+		}
+		if name != "data" {
+			t.Errorf("name: got %q, want %q", name, "data")
+		}
+	})
+
+	t.Run("CreateVolumeIfNotExist existing", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddVolume(&dockertest.Volume{Name: "data", Driver: "local"})
+		name, err := docker.CreateVolumeIfNotExist(d.Client, "data", nil)
+		if err != nil {
+			t.Fatalf("CreateVolumeIfNotExist: %v", err)
+		}
+		if name != "data" {
+			t.Errorf("name: got %q, want %q", name, "data")
+		}
+	})
+
+	t.Run("CreateVolumeIfNotExist missing", func(t *testing.T) {
+		d := newDaemon(t)
+		name, err := docker.CreateVolumeIfNotExist(d.Client, "data", nil)
+		if err != nil {
+			t.Fatalf("CreateVolumeIfNotExist: %v", err)
+		}
+		if name != "data" {
+			t.Errorf("name: got %q, want %q", name, "data")
+		}
+		if _, err := docker.InspectVolume(d.Client, "data"); err != nil {
+			t.Errorf("InspectVolume after create-if-not-exist: %v", err)
+		}
+	})
+}

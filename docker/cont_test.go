@@ -101,3 +101,83 @@ func TestContInspect(t *testing.T) {
 		}
 	})
 }
+
+func TestCreateCont(t *testing.T) {
+	t.Run("basic", func(t *testing.T) {
+		d := newDaemon(t)
+		cont, err := docker.CreateCont(d.Client, "nginx:latest", &docker.ContConfig{
+			Name:     "web",
+			Hostname: "web-host",
+			Labels:   map[string]string{"role": "frontend"},
+		})
+		if err != nil {
+			t.Fatalf("CreateCont: %v", err)
+		}
+		if cont.ID() == "" {
+			t.Errorf("ID(): empty, want non-empty")
+		}
+
+		got, err := docker.NewCont(d.Client, cont.ID()).Inspect()
+		if err != nil {
+			t.Fatalf("Inspect: %v", err)
+		}
+		if got.Image != "nginx:latest" || got.Config.Hostname != "web-host" ||
+			got.Config.Labels["role"] != "frontend" {
+			t.Errorf("inspect: got %+v", got)
+		}
+
+		got2, err := docker.NewCont(d.Client, "web").Inspect()
+		if err != nil {
+			t.Fatalf("Inspect by name: %v", err)
+		}
+		if got2.ID != cont.ID() {
+			t.Errorf("ID by name: got %q, want %q", got2.ID, cont.ID())
+		}
+	})
+
+	t.Run("no name", func(t *testing.T) {
+		d := newDaemon(t)
+		cont, err := docker.CreateCont(d.Client, "nginx:latest", nil)
+		if err != nil {
+			t.Fatalf("CreateCont: %v", err)
+		}
+		got, err := docker.NewCont(d.Client, cont.ID()).Inspect()
+		if err != nil {
+			t.Fatalf("Inspect: %v", err)
+		}
+		if got.Image != "nginx:latest" {
+			t.Errorf("Image: got %q, want %q", got.Image, "nginx:latest")
+		}
+	})
+}
+
+func TestRenameCont(t *testing.T) {
+	t.Run("found", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{
+			ID:    "abc123",
+			Names: []string{"/old"},
+		})
+		if err := docker.RenameCont(d.Client, "abc123", "new"); err != nil {
+			t.Fatalf("RenameCont: %v", err)
+		}
+		got, err := docker.NewCont(d.Client, "new").Inspect()
+		if err != nil {
+			t.Fatalf("Inspect after rename: %v", err)
+		}
+		if got.ID != "abc123" {
+			t.Errorf("ID: got %q, want %q", got.ID, "abc123")
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		d := newDaemon(t)
+		err := docker.RenameCont(d.Client, "missing", "new")
+		if err == nil {
+			t.Fatal("RenameCont: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+}
