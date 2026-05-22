@@ -1,3 +1,4 @@
 package docker
 
-const apiVersion = "/v1.40"
+// APIVersion is the Docker Engine API version this client targets.
+const APIVersion = "/v1.40"

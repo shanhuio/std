@@ -14,7 +14,7 @@ func urlQuery(p string, q url.Values) string {
 }
 
 func apiURLQuery(p string, q url.Values) string {
-	return urlQuery(path.Join(apiVersion, p), q)
+	return urlQuery(path.Join(APIVersion, p), q)
 }
 
 func singleQuery(k, v string) url.Values {
