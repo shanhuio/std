@@ -159,6 +159,7 @@ func (d *FakeDaemon) registerRoutes() {
 	d.handle("POST", "images/create", servePullImage)
 	d.handle("POST", "images/load", serveLoadImages)
 	d.handle("GET", "images/get", serveSaveImages)
+	d.handle("POST", "build", serveBuild)
 }
 
 func servePing(_ *FakeDaemon, w http.ResponseWriter, _ *http.Request) {

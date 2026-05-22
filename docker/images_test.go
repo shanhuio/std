@@ -1,6 +1,7 @@
 package docker_test
 
 import (
+	"archive/tar"
 	"bytes"
 	"sort"
 	"testing"
@@ -338,6 +339,74 @@ func TestSaveLoadRoundtrip(t *testing.T) {
 	if len(infos) != 1 || len(infos[0].RepoTags) != 1 || infos[0].RepoTags[0] != "nginx:latest" {
 		t.Errorf("ListImages: got %+v, want one nginx:latest", infos)
 	}
+}
+
+func TestBuildImage(t *testing.T) {
+	t.Run("from tarball", func(t *testing.T) {
+		d := newDaemon(t)
+
+		var buf bytes.Buffer
+		tw := tar.NewWriter(&buf)
+		const dockerfile = "FROM scratch\n"
+		if err := tw.WriteHeader(&tar.Header{
+			Name:     "Dockerfile",
+			Mode:     0600,
+			Size:     int64(len(dockerfile)),
+			Typeflag: tar.TypeReg,
+		}); err != nil {
+			t.Fatalf("tar header: %v", err)
+		}
+		if _, err := tw.Write([]byte(dockerfile)); err != nil {
+			t.Fatalf("tar write: %v", err)
+		}
+		if err := tw.Close(); err != nil {
+			t.Fatalf("tar close: %v", err)
+		}
+
+		if err := docker.BuildImage(d.Client, "myimage:latest", &buf); err != nil {
+			t.Fatalf("BuildImage: %v", err)
+		}
+		if _, err := docker.InspectImage(d.Client, "myimage:latest"); err != nil {
+			t.Errorf("InspectImage after build: %v", err)
+		}
+	})
+
+	t.Run("from tarutil.Stream", func(t *testing.T) {
+		d := newDaemon(t)
+		ts := docker.NewTarStream("FROM scratch\nCMD [\"true\"]\n")
+		if err := docker.BuildImageStream(d.Client, "mystream:v1", ts); err != nil {
+			t.Fatalf("BuildImageStream: %v", err)
+		}
+		if _, err := docker.InspectImage(d.Client, "mystream:v1"); err != nil {
+			t.Errorf("InspectImage after build: %v", err)
+		}
+	})
+
+	t.Run("with build args and no-cache", func(t *testing.T) {
+		d := newDaemon(t)
+		ts := docker.NewTarStream("FROM scratch\n")
+		err := docker.BuildImageConfig(d.Client, "args:1", &docker.BuildConfig{
+			Files: ts,
+			Args:  map[string]string{"FOO": "bar"},
+		})
+		if err != nil {
+			t.Fatalf("BuildImageConfig: %v", err)
+		}
+		if _, err := docker.InspectImage(d.Client, "args:1"); err != nil {
+			t.Errorf("InspectImage after build: %v", err)
+		}
+	})
+
+	t.Run("no input", func(t *testing.T) {
+		d := newDaemon(t)
+		err := docker.BuildImageConfig(d.Client, "tag", &docker.BuildConfig{})
+		if err == nil {
+			t.Fatal("BuildImageConfig: expected error, got nil")
+		}
+		if !errcode.IsInvalidArg(err) {
+			t.Errorf("expected InvalidArg, got %v", err)
+		}
+	})
 }
 
 func TestRemoveImage(t *testing.T) {

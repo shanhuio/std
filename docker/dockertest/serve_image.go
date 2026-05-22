@@ -3,6 +3,7 @@ package dockertest
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 )
 
@@ -93,6 +94,36 @@ func serveLoadImages(d *FakeDaemon, w http.ResponseWriter, r *http.Request) {
 				"stream": "Loaded image: " + tag + "\n",
 			}))
 		}
+	}
+}
+
+func serveBuild(d *FakeDaemon, w http.ResponseWriter, r *http.Request) {
+	tag := r.URL.Query().Get("t")
+	if _, err := io.Copy(io.Discard, r.Body); err != nil {
+		d.data.recordErr(fmt.Errorf("read build body: %w", err))
+		http.Error(w, "read body", http.StatusBadRequest)
+		return
+	}
+
+	id := d.data.nextID("img")
+	var tags []string
+	if tag != "" {
+		tags = []string{tag}
+	}
+	d.data.addImage(&Image{ID: id, RepoTags: tags})
+
+	setJSONContentType(w)
+	enc := json.NewEncoder(w)
+	d.data.recordErr(enc.Encode(map[string]string{
+		"stream": "Step 1/1 : FROM scratch\n",
+	}))
+	d.data.recordErr(enc.Encode(map[string]string{
+		"stream": "Successfully built " + id + "\n",
+	}))
+	if tag != "" {
+		d.data.recordErr(enc.Encode(map[string]string{
+			"stream": "Successfully tagged " + tag + "\n",
+		}))
 	}
 }
 
