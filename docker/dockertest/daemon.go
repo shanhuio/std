@@ -178,11 +178,7 @@ func (d *FakeDaemon) servePing(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (d *FakeDaemon) serveVersion(w http.ResponseWriter, _ *http.Request) {
-	v := d.getVersion()
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		d.t.Errorf("encode version: %v", err)
-	}
+	writeJSON(d.t, w, d.getVersion())
 }
 
 func (d *FakeDaemon) getContainers(wantLabels []string) []*docker.ContListInfo {
@@ -206,11 +202,7 @@ func (d *FakeDaemon) serveListContainers(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	matched := d.getContainers(filters["label"])
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(matched); err != nil {
-		d.t.Errorf("encode containers: %v", err)
-	}
+	writeJSON(d.t, w, matched)
 }
 
 func (d *FakeDaemon) serveInspectNetwork(w http.ResponseWriter, r *http.Request) {
@@ -220,10 +212,7 @@ func (d *FakeDaemon) serveInspectNetwork(w http.ResponseWriter, r *http.Request)
 		writeNotFound(w, fmt.Sprintf("network %s not found", name))
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(n.toInfo()); err != nil {
-		d.t.Errorf("encode network: %v", err)
-	}
+	writeJSON(d.t, w, n.toInfo())
 }
 
 func (d *FakeDaemon) serveListVolumes(w http.ResponseWriter, r *http.Request) {
@@ -235,21 +224,14 @@ func (d *FakeDaemon) serveListVolumes(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	matched := d.getVolumes(filters["label"])
-
-	w.Header().Set("Content-Type", "application/json")
 	resp := struct {
 		Volumes []*docker.VolumeInfo
 	}{Volumes: matched}
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		d.t.Errorf("encode volumes: %v", err)
-	}
+	writeJSON(d.t, w, resp)
 }
 
 func (d *FakeDaemon) serveListImages(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(d.getImages()); err != nil {
-		d.t.Errorf("encode images: %v", err)
-	}
+	writeJSON(d.t, w, d.getImages())
 }
 
 func (d *FakeDaemon) serveInspectImage(w http.ResponseWriter, r *http.Request) {
@@ -259,9 +241,6 @@ func (d *FakeDaemon) serveInspectImage(w http.ResponseWriter, r *http.Request) {
 		writeNotFound(w, fmt.Sprintf("No such image: %s", name))
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(img.toInfo()); err != nil {
-		d.t.Errorf("encode image: %v", err)
-	}
+	writeJSON(d.t, w, img.toInfo())
 }
 
