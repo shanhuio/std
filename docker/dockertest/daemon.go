@@ -34,6 +34,7 @@ type FakeDaemon struct {
 	mu      sync.Mutex
 	version docker.VersionInfo
 	conts   []*Container
+	nets    []*Network
 }
 
 // New starts a FakeDaemon. The server is shut down when the test ends.
@@ -70,6 +71,7 @@ func (d *FakeDaemon) registerRoutes() {
 	d.handle("HEAD", "_ping", d.servePing)
 	d.handle("GET", "version", d.serveVersion)
 	d.handle("GET", "containers/json", d.serveListContainers)
+	d.handle("GET", "networks/{name}", d.serveInspectNetwork)
 }
 
 // SetVersion sets the version info returned by GET /version.
@@ -91,6 +93,27 @@ func (d *FakeDaemon) AddContainer(c *Container) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.conts = append(d.conts, c)
+}
+
+// AddNetwork adds n to the set of networks known to the fake daemon. The
+// pointer is stored as-is; later mutations to *n are visible to the fake.
+func (d *FakeDaemon) AddNetwork(n *Network) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.nets = append(d.nets, n)
+}
+
+// getNetwork returns the network matching nameOrID by Name or ID, or nil if
+// none match.
+func (d *FakeDaemon) getNetwork(nameOrID string) *Network {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, n := range d.nets {
+		if n.Name == nameOrID || n.ID == nameOrID {
+			return n
+		}
+	}
+	return nil
 }
 
 func (d *FakeDaemon) servePing(w http.ResponseWriter, _ *http.Request) {
@@ -130,6 +153,19 @@ func (d *FakeDaemon) serveListContainers(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(matched); err != nil {
 		d.t.Errorf("encode containers: %v", err)
+	}
+}
+
+func (d *FakeDaemon) serveInspectNetwork(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	n := d.getNetwork(name)
+	if n == nil {
+		writeNotFound(w, fmt.Sprintf("network %s not found", name))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(n.toInfo()); err != nil {
+		d.t.Errorf("encode network: %v", err)
 	}
 }
 
