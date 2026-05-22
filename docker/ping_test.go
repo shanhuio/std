@@ -1,10 +1,14 @@
 package docker_test
 
-import "testing"
+import (
+	"testing"
+
+	"shanhu.io/std/docker"
+)
 
 func TestPing(t *testing.T) {
 	d := newDaemon(t)
-	if err := d.Client.Ping(); err != nil {
+	if err := docker.Ping(d.Client); err != nil {
 		t.Fatalf("Ping: %v", err)
 	}
 }
