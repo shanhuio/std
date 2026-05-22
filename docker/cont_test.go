@@ -1,6 +1,7 @@
 package docker_test
 
 import (
+	"bytes"
 	"testing"
 
 	"shanhu.io/std/docker"
@@ -268,6 +269,106 @@ func TestContLifecycle(t *testing.T) {
 		}
 		if ok {
 			t.Errorf("Exists: got true after Drop, want false")
+		}
+	})
+}
+
+func TestContExec(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc"})
+		d.SetExecResponse(dockertest.ExecResponse{
+			Stdout:   "Hello\n",
+			ExitCode: 0,
+		})
+
+		var stdout, stderr bytes.Buffer
+		code, err := docker.NewCont(d.Client, "abc").ExecWithSetup(&docker.ExecSetup{
+			Cmd:    []string{"echo", "Hello"},
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+		if err != nil {
+			t.Fatalf("ExecWithSetup: %v", err)
+		}
+		if code != 0 {
+			t.Errorf("exit code: got %d, want 0", code)
+		}
+		if stdout.String() != "Hello\n" {
+			t.Errorf("stdout: got %q, want %q", stdout.String(), "Hello\n")
+		}
+		if stderr.Len() != 0 {
+			t.Errorf("stderr: got %q, want empty", stderr.String())
+		}
+	})
+
+	t.Run("non-zero exit and stderr", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc"})
+		d.SetExecResponse(dockertest.ExecResponse{
+			Stderr:   "Boom\n",
+			ExitCode: 42,
+		})
+
+		var stdout, stderr bytes.Buffer
+		code, err := docker.NewCont(d.Client, "abc").ExecWithSetup(&docker.ExecSetup{
+			Cmd:    []string{"false"},
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+		if err != nil {
+			t.Fatalf("ExecWithSetup: %v", err)
+		}
+		if code != 42 {
+			t.Errorf("exit code: got %d, want 42", code)
+		}
+		if stderr.String() != "Boom\n" {
+			t.Errorf("stderr: got %q, want %q", stderr.String(), "Boom\n")
+		}
+	})
+
+	t.Run("both streams", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc"})
+		d.SetExecResponse(dockertest.ExecResponse{
+			Stdout:   "out-msg",
+			Stderr:   "err-msg",
+			ExitCode: 0,
+		})
+
+		var stdout, stderr bytes.Buffer
+		if _, err := docker.NewCont(d.Client, "abc").ExecWithSetup(&docker.ExecSetup{
+			Cmd:    []string{"sh", "-c", "echo out; echo err >&2"},
+			Stdout: &stdout,
+			Stderr: &stderr,
+		}); err != nil {
+			t.Fatalf("ExecWithSetup: %v", err)
+		}
+		if stdout.String() != "out-msg" || stderr.String() != "err-msg" {
+			t.Errorf("got stdout=%q stderr=%q", stdout.String(), stderr.String())
+		}
+	})
+
+	t.Run("Cont.Exec splits command", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc"})
+		code, err := docker.NewCont(d.Client, "abc").Exec("ls -la /tmp")
+		if err != nil {
+			t.Fatalf("Exec: %v", err)
+		}
+		if code != 0 {
+			t.Errorf("exit code: got %d, want 0", code)
+		}
+	})
+
+	t.Run("container not found", func(t *testing.T) {
+		d := newDaemon(t)
+		_, err := docker.NewCont(d.Client, "missing").Exec("echo hi")
+		if err == nil {
+			t.Fatal("Exec: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
 		}
 	})
 }

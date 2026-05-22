@@ -99,6 +99,10 @@ func (d *FakeDaemon) AddImage(img *Image) { d.data.addImage(img) }
 // default only "nginx" is pullable.
 func (d *FakeDaemon) AllowPull(image string) { d.data.allowPull(image) }
 
+// SetExecResponse configures the output and exit code returned by
+// subsequent Cont.Exec calls.
+func (d *FakeDaemon) SetExecResponse(resp ExecResponse) { d.data.setExecResponse(resp) }
+
 // writeJSON wraps the package-level writeJSON, recording any encode error
 // via the data's error recorder.
 func (d *FakeDaemon) writeJSON(w http.ResponseWriter, body any) {
@@ -132,6 +136,9 @@ func (d *FakeDaemon) registerRoutes() {
 	d.handle("POST", "containers/{id}/kill", serveKillContainer)
 	d.handle("POST", "containers/{id}/wait", serveWaitContainer)
 	d.handle("DELETE", "containers/{id}", serveRemoveContainer)
+	d.handle("POST", "containers/{id}/exec", serveCreateExec)
+	d.handle("POST", "exec/{id}/start", serveStartExec)
+	d.handle("GET", "exec/{id}/json", serveInspectExec)
 
 	d.handle("GET", "networks/{name}", serveInspectNetwork)
 	d.handle("POST", "networks/create", serveCreateNetwork)

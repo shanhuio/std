@@ -21,7 +21,9 @@ type daemonData struct {
 	nets     []*Network
 	vols     []*Volume
 	imgs     []*Image
+	execs    []*execState
 	pullable map[string]bool
+	execResp ExecResponse
 
 	idSeq int
 	errs  []error
@@ -337,6 +339,64 @@ func (d *daemonData) addImageTag(nameOrID, repoTag string) bool {
 	}
 	img.RepoTags = append(img.RepoTags, repoTag)
 	return true
+}
+
+// Exec ------------------------------------------------------------------
+
+// setExecResponse sets the response that the fake daemon will produce for
+// subsequent exec calls.
+func (d *daemonData) setExecResponse(resp ExecResponse) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.execResp = resp
+}
+
+// createExec creates a new exec session attached to the container matching
+// idOrName. Returns the new exec ID, or "" if no such container.
+func (d *daemonData) createExec(idOrName string, cmd []string) string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	c := d.findContainer(idOrName)
+	if c == nil {
+		return ""
+	}
+	d.idSeq++
+	id := fmt.Sprintf("exec%d", d.idSeq)
+	d.execs = append(d.execs, &execState{
+		ID:          id,
+		ContainerID: c.ID,
+		Cmd:         cmd,
+		Running:     false,
+	})
+	return id
+}
+
+// startExec marks the exec as finished and returns the configured response
+// to write. Returns (resp, true) if found, (_, false) otherwise.
+func (d *daemonData) startExec(execID string) (ExecResponse, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, e := range d.execs {
+		if e.ID == execID {
+			e.Running = false
+			e.ExitCode = d.execResp.ExitCode
+			return d.execResp, true
+		}
+	}
+	return ExecResponse{}, false
+}
+
+// inspectExec returns the current Running/ExitCode of an exec, or ok=false
+// if not found.
+func (d *daemonData) inspectExec(execID string) (running bool, exitCode int, ok bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, e := range d.execs {
+		if e.ID == execID {
+			return e.Running, e.ExitCode, true
+		}
+	}
+	return false, 0, false
 }
 
 func (d *daemonData) removeImage(nameOrID string) bool {
