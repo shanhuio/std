@@ -8,15 +8,17 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"shanhu.io/std/docker"
 )
 
-// FakeDaemon is an in-process stand-in for the Docker daemon. It listens on
-// a unix domain socket inside the test's temporary directory, the same shape
-// as a real local Docker daemon. Tests register route handlers on it and
-// exercise the exported docker.Client API.
+// FakeDaemon is an in-process Docker daemon stand-in. It implements (a subset
+// of) the Docker Engine API and listens on a per-test unix domain socket the
+// same shape as a real local daemon. Tests configure its state via the
+// helper methods and exercise behavior through the exported docker.Client
+// API; they should not register HTTP handlers on it directly.
 type FakeDaemon struct {
 	t      *testing.T
 	mux    *http.ServeMux
@@ -27,10 +29,13 @@ type FakeDaemon struct {
 
 	// Client is a docker.Client wired to talk to this fake daemon.
 	Client *docker.Client
+
+	mu      sync.Mutex
+	version docker.VersionInfo
+	conts   []*Container
 }
 
-// New starts a FakeDaemon with no routes registered. The server is shut down
-// when the test ends.
+// New starts a FakeDaemon. The server is shut down when the test ends.
 func New(t *testing.T) *FakeDaemon {
 	t.Helper()
 	sockPath := filepath.Join(t.TempDir(), "docker.sock")
@@ -44,40 +49,86 @@ func New(t *testing.T) *FakeDaemon {
 	go func() { _ = srv.Serve(l) }()
 	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
 
-	return &FakeDaemon{
+	d := &FakeDaemon{
 		t:        t,
 		mux:      mux,
 		server:   srv,
 		SockPath: sockPath,
 		Client:   docker.NewUnixClient(sockPath),
 	}
+	d.registerRoutes()
+	return d
 }
 
-// Handle registers a handler for `method p` under docker.APIVersion. p must
-// start with "/".
-func (d *FakeDaemon) Handle(method, p string, h http.HandlerFunc) {
-	d.t.Helper()
+func (d *FakeDaemon) handle(method, p string, h http.HandlerFunc) {
 	d.mux.HandleFunc(method+" "+docker.APIVersion+p, h)
 }
 
-// HandleJSON registers a route that returns body encoded as JSON with 200 OK.
-func (d *FakeDaemon) HandleJSON(method, p string, body any) {
-	d.t.Helper()
-	d.Handle(method, p, func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(body); err != nil {
-			d.t.Errorf("encode response for %s %s: %v", method, p, err)
-		}
-	})
+func (d *FakeDaemon) registerRoutes() {
+	d.handle("GET", "/_ping", d.servePing)
+	d.handle("HEAD", "/_ping", d.servePing)
+	d.handle("GET", "/version", d.serveVersion)
+	d.handle("GET", "/containers/json", d.serveListContainers)
 }
 
-// HandleError registers a route that returns the given HTTP status with a
-// Docker-style JSON error body.
-func (d *FakeDaemon) HandleError(method, p string, status int, msg string) {
-	d.t.Helper()
-	d.Handle(method, p, func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		fmt.Fprintf(w, `{"message":%q}`, msg)
-	})
+// SetVersion sets the version info returned by GET /version.
+func (d *FakeDaemon) SetVersion(v docker.VersionInfo) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.version = v
 }
+
+func (d *FakeDaemon) getVersion() docker.VersionInfo {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.version
+}
+
+// AddContainer adds c to the set of containers known to the fake daemon. The
+// pointer is stored as-is; later mutations to *c are visible to the fake.
+func (d *FakeDaemon) AddContainer(c *Container) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.conts = append(d.conts, c)
+}
+
+func (d *FakeDaemon) servePing(w http.ResponseWriter, _ *http.Request) {
+	fmt.Fprint(w, "OK")
+}
+
+func (d *FakeDaemon) serveVersion(w http.ResponseWriter, _ *http.Request) {
+	v := d.getVersion()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		d.t.Errorf("encode version: %v", err)
+	}
+}
+
+func (d *FakeDaemon) getContainers(wantLabels []string) []*docker.ContListInfo {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	matched := make([]*docker.ContListInfo, 0, len(d.conts))
+	for _, c := range d.conts {
+		if matchesAllLabels(c.Labels, wantLabels) {
+			matched = append(matched, c.toListInfo())
+		}
+	}
+	return matched
+}
+
+func (d *FakeDaemon) serveListContainers(w http.ResponseWriter, r *http.Request) {
+	var filters map[string][]string
+	if s := r.URL.Query().Get("filters"); s != "" {
+		if err := json.Unmarshal([]byte(s), &filters); err != nil {
+			http.Error(w, "invalid filters", http.StatusBadRequest)
+			return
+		}
+	}
+	matched := d.getContainers(filters["label"])
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(matched); err != nil {
+		d.t.Errorf("encode containers: %v", err)
+	}
+}
+
