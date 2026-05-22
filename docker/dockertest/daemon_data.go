@@ -209,6 +209,18 @@ func (d *daemonData) containerReadFile(idOrName, path string) ([]byte, bool) {
 	return bs, ok
 }
 
+// containerLogs returns the (stdout, stderr) log content for the matching
+// container. Returns ok=false if not found.
+func (d *daemonData) containerLogs(idOrName string) (stdout, stderr string, ok bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	c := d.findContainer(idOrName)
+	if c == nil {
+		return "", "", false
+	}
+	return c.LogStdout, c.LogStderr, true
+}
+
 // removeContainer drops the matching container from the set. Returns false
 // if not found.
 func (d *daemonData) removeContainer(idOrName string) bool {

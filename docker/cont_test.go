@@ -375,6 +375,66 @@ func TestContExec(t *testing.T) {
 	})
 }
 
+func TestContFollowLogs(t *testing.T) {
+	t.Run("stdout only", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{
+			ID:        "abc",
+			LogStdout: "first line\nsecond line\n",
+		})
+
+		var buf bytes.Buffer
+		if err := docker.NewCont(d.Client, "abc").FollowLogs(&buf); err != nil {
+			t.Fatalf("FollowLogs: %v", err)
+		}
+		if got := buf.String(); got != "first line\nsecond line\n" {
+			t.Errorf("logs: got %q, want %q", got, "first line\nsecond line\n")
+		}
+	})
+
+	t.Run("stdout and stderr", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{
+			ID:        "abc",
+			LogStdout: "out\n",
+			LogStderr: "err\n",
+		})
+
+		var buf bytes.Buffer
+		if err := docker.NewCont(d.Client, "abc").FollowLogs(&buf); err != nil {
+			t.Fatalf("FollowLogs: %v", err)
+		}
+		// FollowLogs routes both streams to the same writer.
+		if got := buf.String(); got != "out\nerr\n" {
+			t.Errorf("logs: got %q, want %q", got, "out\nerr\n")
+		}
+	})
+
+	t.Run("empty logs", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc"})
+
+		var buf bytes.Buffer
+		if err := docker.NewCont(d.Client, "abc").FollowLogs(&buf); err != nil {
+			t.Fatalf("FollowLogs: %v", err)
+		}
+		if buf.Len() != 0 {
+			t.Errorf("logs: got %q, want empty", buf.String())
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		d := newDaemon(t)
+		err := docker.NewCont(d.Client, "missing").FollowLogs(&bytes.Buffer{})
+		if err == nil {
+			t.Fatal("FollowLogs: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+}
+
 func TestContArchive(t *testing.T) {
 	t.Run("copy out file", func(t *testing.T) {
 		d := newDaemon(t)

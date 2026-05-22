@@ -136,6 +136,7 @@ func (d *FakeDaemon) registerRoutes() {
 	d.handle("POST", "containers/{id}/kill", serveKillContainer)
 	d.handle("POST", "containers/{id}/wait", serveWaitContainer)
 	d.handle("DELETE", "containers/{id}", serveRemoveContainer)
+	d.handle("GET", "containers/{id}/logs", serveContainerLogs)
 	d.handle("PUT", "containers/{id}/archive", serveCopyInArchive)
 	d.handle("GET", "containers/{id}/archive", serveCopyOutArchive)
 	d.handle("POST", "containers/{id}/exec", serveCreateExec)

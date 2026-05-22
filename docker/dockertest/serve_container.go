@@ -121,6 +121,23 @@ func serveRemoveContainer(d *FakeDaemon, w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func serveContainerLogs(d *FakeDaemon, w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	stdout, stderr, ok := d.data.containerLogs(id)
+	if !ok {
+		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
+		return
+	}
+	if err := writeLogFrame(w, streamStdout, []byte(stdout)); err != nil {
+		d.data.recordErr(fmt.Errorf("write stdout frame: %w", err))
+		return
+	}
+	if err := writeLogFrame(w, streamStderr, []byte(stderr)); err != nil {
+		d.data.recordErr(fmt.Errorf("write stderr frame: %w", err))
+		return
+	}
+}
+
 func serveCopyInArchive(d *FakeDaemon, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !d.data.containerExists(id) {

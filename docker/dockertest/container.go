@@ -22,6 +22,11 @@ type Container struct {
 	// content. Populated by tests for CopyOutTar/ReadContFile reads, and
 	// updated by CopyInTar requests.
 	Files map[string][]byte
+
+	// LogStdout and LogStderr are the multiplexed log content returned
+	// from the /logs endpoint.
+	LogStdout string
+	LogStderr string
 }
 
 // ContainerMount is one mount on a Container, exposed under
