@@ -6,6 +6,7 @@ import (
 
 	"shanhu.io/std/docker"
 	"shanhu.io/std/docker/dockertest"
+	"shanhu.io/std/errcode"
 )
 
 func TestListVolumesWithLabel(t *testing.T) {
@@ -113,6 +114,40 @@ func TestListVolumesWithLabel(t *testing.T) {
 			v.Mountpoint != web.Mountpoint ||
 			v.Labels["role"] != "frontend" || v.Labels["tier"] != "edge" {
 			t.Errorf("payload mismatch: got %+v, want from %+v", v, web)
+		}
+	})
+}
+
+func TestInspectVolume(t *testing.T) {
+	vol := &dockertest.Volume{
+		Name:       "data",
+		Driver:     "local",
+		Mountpoint: "/var/lib/docker/volumes/data/_data",
+		Labels:     map[string]string{"role": "frontend"},
+	}
+
+	t.Run("found", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddVolume(vol)
+
+		got, err := docker.InspectVolume(d.Client, "data")
+		if err != nil {
+			t.Fatalf("InspectVolume: %v", err)
+		}
+		if got.Name != vol.Name || got.Driver != vol.Driver ||
+			got.Mountpoint != vol.Mountpoint || got.Labels["role"] != "frontend" {
+			t.Errorf("payload mismatch: got %+v, want from %+v", got, vol)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		d := newDaemon(t)
+		_, err := docker.InspectVolume(d.Client, "missing")
+		if err == nil {
+			t.Fatal("InspectVolume: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
 		}
 	})
 }

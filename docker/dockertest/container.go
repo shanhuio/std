@@ -10,6 +10,23 @@ type Container struct {
 	Image   string
 	ImageID string
 	Labels  map[string]string
+
+	// Inspect-only fields.
+	Hostname string
+	Running  bool
+	ExitCode int
+	Error    string
+	Mounts   []ContainerMount
+}
+
+// ContainerMount is one mount on a Container, exposed under
+// HostConfig.Mounts in the inspect response.
+type ContainerMount struct {
+	Type        string
+	Target      string
+	Source      string
+	ReadOnly    bool
+	Consistency string
 }
 
 func (c *Container) toListInfo() *docker.ContListInfo {
@@ -20,4 +37,24 @@ func (c *Container) toListInfo() *docker.ContListInfo {
 		ImageID: c.ImageID,
 		Labels:  c.Labels,
 	}
+}
+
+func (c *Container) toInfo() *docker.ContInfo {
+	info := &docker.ContInfo{ID: c.ID, Image: c.Image}
+	info.Config.Image = c.Image
+	info.Config.Hostname = c.Hostname
+	info.Config.Labels = c.Labels
+	info.State.Running = c.Running
+	info.State.ExitCode = c.ExitCode
+	info.State.Error = c.Error
+	for _, m := range c.Mounts {
+		info.HostConfig.Mounts = append(info.HostConfig.Mounts, &docker.ContMountInfo{
+			Type:        m.Type,
+			Target:      m.Target,
+			Source:      m.Source,
+			ReadOnly:    m.ReadOnly,
+			Consistency: m.Consistency,
+		})
+	}
+	return info
 }

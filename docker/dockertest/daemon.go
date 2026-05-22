@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 
 	"shanhu.io/std/docker"
@@ -116,8 +117,10 @@ func (d *FakeDaemon) registerRoutes() {
 	d.handle("HEAD", "_ping", d.servePing)
 	d.handle("GET", "version", d.serveVersion)
 	d.handle("GET", "containers/json", d.serveListContainers)
+	d.handle("GET", "containers/{id}/json", d.serveInspectContainer)
 	d.handle("GET", "networks/{name}", d.serveInspectNetwork)
 	d.handle("GET", "volumes", d.serveListVolumes)
+	d.handle("GET", "volumes/{name}", d.serveInspectVolume)
 	d.handle("GET", "images/json", d.serveListImages)
 	d.handle("GET", "images/{name}/json", d.serveInspectImage)
 }
@@ -141,6 +144,26 @@ func (d *FakeDaemon) AddContainer(c *Container) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.conts = append(d.conts, c)
+}
+
+// getContainer returns the container matching idOrName by ID or by any of
+// its Names, or nil if none match. Container names are stored Docker-style
+// with a leading "/"; lookup accepts either form.
+func (d *FakeDaemon) getContainer(idOrName string) *Container {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	needle := strings.TrimPrefix(idOrName, "/")
+	for _, c := range d.conts {
+		if c.ID == idOrName {
+			return c
+		}
+		for _, n := range c.Names {
+			if strings.TrimPrefix(n, "/") == needle {
+				return c
+			}
+		}
+	}
+	return nil
 }
 
 // AddNetwork adds n to the set of networks known to the fake daemon. The
@@ -170,6 +193,18 @@ func (d *FakeDaemon) AddVolume(v *Volume) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.vols = append(d.vols, v)
+}
+
+// getVolume returns the volume matching name, or nil if none match.
+func (d *FakeDaemon) getVolume(name string) *Volume {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, v := range d.vols {
+		if v.Name == name {
+			return v
+		}
+	}
+	return nil
 }
 
 func (d *FakeDaemon) getVolumes(wantLabels []string) []*docker.VolumeInfo {
@@ -255,6 +290,26 @@ func (d *FakeDaemon) serveInspectNetwork(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	d.writeJSON(w, n.toInfo())
+}
+
+func (d *FakeDaemon) serveInspectContainer(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	c := d.getContainer(id)
+	if c == nil {
+		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
+		return
+	}
+	d.writeJSON(w, c.toInfo())
+}
+
+func (d *FakeDaemon) serveInspectVolume(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	v := d.getVolume(name)
+	if v == nil {
+		writeNotFound(w, fmt.Sprintf("get %s: no such volume", name))
+		return
+	}
+	d.writeJSON(w, v.toInfo())
 }
 
 func (d *FakeDaemon) serveListVolumes(w http.ResponseWriter, r *http.Request) {
