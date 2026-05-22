@@ -10,7 +10,7 @@ import (
 
 func TestInspectNetwork(t *testing.T) {
 	t.Run("by name", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddNetwork(&dockertest.Network{
 			ID:     "net1",
 			Name:   "frontend",
@@ -37,7 +37,7 @@ func TestInspectNetwork(t *testing.T) {
 	})
 
 	t.Run("by id", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddNetwork(&dockertest.Network{
 			ID: "net1", Name: "frontend", Driver: "bridge",
 		})
@@ -52,7 +52,7 @@ func TestInspectNetwork(t *testing.T) {
 	})
 
 	t.Run("no IPAM when unconfigured", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddNetwork(&dockertest.Network{
 			ID: "net1", Name: "frontend", Driver: "bridge",
 		})
@@ -67,7 +67,7 @@ func TestInspectNetwork(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		_, err := docker.InspectNetwork(d.Client, "missing")
 		if err == nil {
 			t.Fatal("InspectNetwork: expected error, got nil")

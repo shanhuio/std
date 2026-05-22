@@ -4,11 +4,10 @@ import (
 	"testing"
 
 	"shanhu.io/std/docker"
-	"shanhu.io/std/docker/dockertest"
 )
 
 func TestVersion(t *testing.T) {
-	d := dockertest.New(t)
+	d := newDaemon(t)
 	want := docker.VersionInfo{
 		Version:       "24.0.7",
 		APIVersion:    "1.43",

@@ -48,7 +48,7 @@ func TestListVolumesWithLabel(t *testing.T) {
 	}
 
 	t.Run("empty daemon", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		got, err := docker.ListVolumesWithLabel(d.Client, "role=frontend")
 		if err != nil {
 			t.Fatalf("ListVolumesWithLabel: %v", err)
@@ -59,7 +59,7 @@ func TestListVolumesWithLabel(t *testing.T) {
 	})
 
 	t.Run("no match", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddVolume(cache) // no labels
 		got, err := docker.ListVolumesWithLabel(d.Client, "role=frontend")
 		if err != nil {
@@ -71,7 +71,7 @@ func TestListVolumesWithLabel(t *testing.T) {
 	})
 
 	t.Run("key=value match", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddVolume(web)
 		d.AddVolume(db)
 		d.AddVolume(cache)
@@ -85,7 +85,7 @@ func TestListVolumesWithLabel(t *testing.T) {
 	})
 
 	t.Run("key-only match", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddVolume(web)
 		d.AddVolume(db)
 		d.AddVolume(cache)
@@ -99,7 +99,7 @@ func TestListVolumesWithLabel(t *testing.T) {
 	})
 
 	t.Run("full payload preserved", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddVolume(web)
 		got, err := docker.ListVolumesWithLabel(d.Client, "role=frontend")
 		if err != nil {

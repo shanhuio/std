@@ -49,7 +49,7 @@ func TestListContsWithLabel(t *testing.T) {
 	}
 
 	t.Run("empty daemon", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		got, err := docker.ListContsWithLabel(d.Client, "role=frontend")
 		if err != nil {
 			t.Fatalf("ListContsWithLabel: %v", err)
@@ -60,7 +60,7 @@ func TestListContsWithLabel(t *testing.T) {
 	})
 
 	t.Run("no match", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddContainer(db) // no labels at all
 		got, err := docker.ListContsWithLabel(d.Client, "role=frontend")
 		if err != nil {
@@ -72,7 +72,7 @@ func TestListContsWithLabel(t *testing.T) {
 	})
 
 	t.Run("key=value match", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddContainer(frontend)
 		d.AddContainer(backend)
 		d.AddContainer(db)
@@ -86,7 +86,7 @@ func TestListContsWithLabel(t *testing.T) {
 	})
 
 	t.Run("key-only match", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddContainer(frontend)
 		d.AddContainer(backend)
 		d.AddContainer(db)
@@ -100,7 +100,7 @@ func TestListContsWithLabel(t *testing.T) {
 	})
 
 	t.Run("shared label matches all", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddContainer(frontend)
 		d.AddContainer(backend)
 		d.AddContainer(db)
@@ -114,7 +114,7 @@ func TestListContsWithLabel(t *testing.T) {
 	})
 
 	t.Run("full payload preserved", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddContainer(frontend)
 		got, err := docker.ListContsWithLabel(d.Client, "role=frontend")
 		if err != nil {

@@ -41,7 +41,7 @@ func TestListImages(t *testing.T) {
 	}
 
 	t.Run("empty daemon", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		got, err := docker.ListImages(d.Client)
 		if err != nil {
 			t.Fatalf("ListImages: %v", err)
@@ -52,7 +52,7 @@ func TestListImages(t *testing.T) {
 	})
 
 	t.Run("multiple images", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddImage(nginx)
 		d.AddImage(postgres)
 
@@ -67,7 +67,7 @@ func TestListImages(t *testing.T) {
 	})
 
 	t.Run("full payload preserved", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddImage(nginx)
 
 		got, err := docker.ListImages(d.Client)
@@ -97,7 +97,7 @@ func TestInspectImage(t *testing.T) {
 	}
 
 	t.Run("by id", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddImage(nginx)
 
 		got, err := docker.InspectImage(d.Client, "sha256:nginxid")
@@ -112,7 +112,7 @@ func TestInspectImage(t *testing.T) {
 	})
 
 	t.Run("by tag", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddImage(nginx)
 
 		got, err := docker.InspectImage(d.Client, "nginx:latest")
@@ -125,7 +125,7 @@ func TestInspectImage(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		_, err := docker.InspectImage(d.Client, "missing:tag")
 		if err == nil {
 			t.Fatal("InspectImage: expected error, got nil")
@@ -136,7 +136,7 @@ func TestInspectImage(t *testing.T) {
 	})
 
 	t.Run("HasImage true", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		d.AddImage(nginx)
 		ok, err := docker.HasImage(d.Client, "nginx:1.25")
 		if err != nil {
@@ -148,7 +148,7 @@ func TestInspectImage(t *testing.T) {
 	})
 
 	t.Run("HasImage false", func(t *testing.T) {
-		d := dockertest.New(t)
+		d := newDaemon(t)
 		ok, err := docker.HasImage(d.Client, "missing:tag")
 		if err != nil {
 			t.Fatalf("HasImage: %v", err)

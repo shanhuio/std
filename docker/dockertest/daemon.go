@@ -4,27 +4,28 @@ package dockertest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"sync"
-	"testing"
 
 	"shanhu.io/std/docker"
 )
 
 // FakeDaemon is an in-process Docker daemon stand-in. It implements (a subset
-// of) the Docker Engine API and listens on a per-test unix domain socket the
-// same shape as a real local daemon. Tests configure its state via the
-// helper methods and exercise behavior through the exported docker.Client
-// API; they should not register HTTP handlers on it directly.
+// of) the Docker Engine API and listens on a unix domain socket the same
+// shape as a real local daemon. Tests configure its state via the helper
+// methods and exercise behavior through the exported docker.Client API.
+// Encode and other internal errors are recorded and returned by Err.
 type FakeDaemon struct {
-	t      *testing.T
 	mux    *http.ServeMux
 	server *http.Server
+	tmpDir string
 
 	// SockPath is the unix socket the fake daemon listens on.
 	SockPath string
@@ -38,31 +39,66 @@ type FakeDaemon struct {
 	nets    []*Network
 	vols    []*Volume
 	imgs    []*Image
+	errs    []error
 }
 
-// New starts a FakeDaemon. The server is shut down when the test ends.
-func New(t *testing.T) *FakeDaemon {
-	t.Helper()
-	sockPath := filepath.Join(t.TempDir(), "docker.sock")
+// New starts a FakeDaemon listening on a unix socket inside a temporary
+// directory. Call Close when done.
+func New() (*FakeDaemon, error) {
+	tmpDir, err := os.MkdirTemp("", "dockertest-*")
+	if err != nil {
+		return nil, fmt.Errorf("create temp dir: %w", err)
+	}
+	sockPath := filepath.Join(tmpDir, "docker.sock")
 	l, err := net.Listen("unix", sockPath)
 	if err != nil {
-		t.Fatalf("listen unix %q: %v", sockPath, err)
+		_ = os.RemoveAll(tmpDir)
+		return nil, fmt.Errorf("listen unix %q: %w", sockPath, err)
 	}
 
 	mux := http.NewServeMux()
 	srv := &http.Server{Handler: mux}
-	go func() { _ = srv.Serve(l) }()
-	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
-
 	d := &FakeDaemon{
-		t:        t,
 		mux:      mux,
 		server:   srv,
+		tmpDir:   tmpDir,
 		SockPath: sockPath,
 		Client:   docker.NewUnixClient(sockPath),
 	}
 	d.registerRoutes()
-	return d
+	go func() { _ = srv.Serve(l) }()
+	return d, nil
+}
+
+// Close shuts down the fake daemon and removes its temporary directory.
+func (d *FakeDaemon) Close() error {
+	shutdownErr := d.server.Shutdown(context.Background())
+	rmErr := os.RemoveAll(d.tmpDir)
+	if shutdownErr != nil {
+		return shutdownErr
+	}
+	return rmErr
+}
+
+// Err returns the joined internal errors recorded by the fake daemon, or
+// nil if none have been recorded. Typically checked via a deferred call at
+// the end of a test.
+func (d *FakeDaemon) Err() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if len(d.errs) == 0 {
+		return nil
+	}
+	return errors.Join(d.errs...)
+}
+
+func (d *FakeDaemon) recordErr(err error) {
+	if err == nil {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.errs = append(d.errs, err)
 }
 
 func (d *FakeDaemon) handle(method, p string, h http.HandlerFunc) {
@@ -178,7 +214,7 @@ func (d *FakeDaemon) servePing(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (d *FakeDaemon) serveVersion(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(d.t, w, d.getVersion())
+	d.recordErr(writeJSON(w, d.getVersion()))
 }
 
 func (d *FakeDaemon) getContainers(wantLabels []string) []*docker.ContListInfo {
@@ -202,7 +238,7 @@ func (d *FakeDaemon) serveListContainers(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	matched := d.getContainers(filters["label"])
-	writeJSON(d.t, w, matched)
+	d.recordErr(writeJSON(w, matched))
 }
 
 func (d *FakeDaemon) serveInspectNetwork(w http.ResponseWriter, r *http.Request) {
@@ -212,7 +248,7 @@ func (d *FakeDaemon) serveInspectNetwork(w http.ResponseWriter, r *http.Request)
 		writeNotFound(w, fmt.Sprintf("network %s not found", name))
 		return
 	}
-	writeJSON(d.t, w, n.toInfo())
+	d.recordErr(writeJSON(w, n.toInfo()))
 }
 
 func (d *FakeDaemon) serveListVolumes(w http.ResponseWriter, r *http.Request) {
@@ -227,11 +263,11 @@ func (d *FakeDaemon) serveListVolumes(w http.ResponseWriter, r *http.Request) {
 	resp := struct {
 		Volumes []*docker.VolumeInfo
 	}{Volumes: matched}
-	writeJSON(d.t, w, resp)
+	d.recordErr(writeJSON(w, resp))
 }
 
 func (d *FakeDaemon) serveListImages(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(d.t, w, d.getImages())
+	d.recordErr(writeJSON(w, d.getImages()))
 }
 
 func (d *FakeDaemon) serveInspectImage(w http.ResponseWriter, r *http.Request) {
@@ -241,6 +277,5 @@ func (d *FakeDaemon) serveInspectImage(w http.ResponseWriter, r *http.Request) {
 		writeNotFound(w, fmt.Sprintf("No such image: %s", name))
 		return
 	}
-	writeJSON(d.t, w, img.toInfo())
+	d.recordErr(writeJSON(w, img.toInfo()))
 }
-

@@ -4,21 +4,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"testing"
 )
 
 func setJSONContentType(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 }
 
-// writeJSON sets the JSON content type and encodes body to w. Any encode
-// error is reported via t.Errorf.
-func writeJSON(t *testing.T, w http.ResponseWriter, body any) {
-	t.Helper()
+// writeJSON sets the JSON content type and encodes body to w. The returned
+// error, if any, is intended to be passed to FakeDaemon.recordErr by the
+// caller.
+func writeJSON(w http.ResponseWriter, body any) error {
 	setJSONContentType(w)
 	if err := json.NewEncoder(w).Encode(body); err != nil {
-		t.Errorf("encode response: %v", err)
+		return fmt.Errorf("encode response: %w", err)
 	}
+	return nil
 }
 
 func writeNotFound(w http.ResponseWriter, msg string) {
