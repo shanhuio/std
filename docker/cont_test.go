@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"shanhu.io/std/docker"
@@ -528,6 +530,74 @@ func TestContArchive(t *testing.T) {
 		}
 		if string(bs) != payload {
 			t.Errorf("content: got %q, want %q", bs, payload)
+		}
+	})
+
+	t.Run("CopyOut writes file into dir", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{
+			ID: "abc",
+			Files: map[string][]byte{
+				"/etc/hostname": []byte("myhost\n"),
+			},
+		})
+
+		destDir := t.TempDir()
+		if err := docker.NewCont(d.Client, "abc").CopyOut("/etc/hostname", destDir); err != nil {
+			t.Fatalf("CopyOut: %v", err)
+		}
+		bs, err := os.ReadFile(filepath.Join(destDir, "hostname"))
+		if err != nil {
+			t.Fatalf("read dest: %v", err)
+		}
+		if string(bs) != "myhost\n" {
+			t.Errorf("content: got %q, want %q", bs, "myhost\n")
+		}
+	})
+
+	t.Run("CopyOut not found", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc"})
+		err := docker.NewCont(d.Client, "abc").CopyOut("/missing", t.TempDir())
+		if err == nil {
+			t.Fatal("CopyOut: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+
+	t.Run("CopyOutFile", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{
+			ID: "abc",
+			Files: map[string][]byte{
+				"/etc/hostname": []byte("myhost\n"),
+			},
+		})
+
+		dest := filepath.Join(t.TempDir(), "out.txt")
+		if err := docker.NewCont(d.Client, "abc").CopyOutFile("/etc/hostname", dest); err != nil {
+			t.Fatalf("CopyOutFile: %v", err)
+		}
+		bs, err := os.ReadFile(dest)
+		if err != nil {
+			t.Fatalf("read dest: %v", err)
+		}
+		if string(bs) != "myhost\n" {
+			t.Errorf("content: got %q, want %q", bs, "myhost\n")
+		}
+	})
+
+	t.Run("CopyOutFile not found", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc"})
+		err := docker.NewCont(d.Client, "abc").CopyOutFile("/missing", filepath.Join(t.TempDir(), "out.txt"))
+		if err == nil {
+			t.Fatal("CopyOutFile: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
 		}
 	})
 
