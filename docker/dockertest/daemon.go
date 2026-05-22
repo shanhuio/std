@@ -3,7 +3,6 @@ package dockertest
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -106,351 +105,57 @@ func (d *FakeDaemon) writeJSON(w http.ResponseWriter, body any) {
 	d.data.recordErr(writeJSON(w, body))
 }
 
-func (d *FakeDaemon) handle(method, p string, h http.HandlerFunc) {
-	d.mux.HandleFunc(method+" "+path.Join(docker.APIVersion, p), h)
+// serveFunc is the signature shared by all dockertest HTTP handlers. The
+// FakeDaemon is passed explicitly so handlers can live as free functions
+// across multiple serve_*.go files.
+type serveFunc func(d *FakeDaemon, w http.ResponseWriter, r *http.Request)
+
+// handle binds a serveFunc into the mux at "METHOD <APIVersion>/<p>".
+func (d *FakeDaemon) handle(method, p string, fn serveFunc) {
+	d.mux.HandleFunc(
+		method+" "+path.Join(docker.APIVersion, p),
+		func(w http.ResponseWriter, r *http.Request) { fn(d, w, r) },
+	)
 }
 
 func (d *FakeDaemon) registerRoutes() {
-	d.handle("GET", "_ping", d.servePing)
-	d.handle("HEAD", "_ping", d.servePing)
-	d.handle("GET", "version", d.serveVersion)
-	d.handle("GET", "containers/json", d.serveListContainers)
-	d.handle("GET", "containers/{id}/json", d.serveInspectContainer)
-	d.handle("POST", "containers/create", d.serveCreateContainer)
-	d.handle("POST", "containers/{id}/rename", d.serveRenameContainer)
-	d.handle("POST", "containers/{id}/start", d.serveStartContainer)
-	d.handle("POST", "containers/{id}/stop", d.serveStopContainer)
-	d.handle("POST", "containers/{id}/kill", d.serveKillContainer)
-	d.handle("POST", "containers/{id}/wait", d.serveWaitContainer)
-	d.handle("DELETE", "containers/{id}", d.serveRemoveContainer)
-	d.handle("GET", "networks/{name}", d.serveInspectNetwork)
-	d.handle("POST", "networks/create", d.serveCreateNetwork)
-	d.handle("DELETE", "networks/{name}", d.serveRemoveNetwork)
-	d.handle("GET", "volumes", d.serveListVolumes)
-	d.handle("GET", "volumes/{name}", d.serveInspectVolume)
-	d.handle("POST", "volumes/create", d.serveCreateVolume)
-	d.handle("DELETE", "volumes/{name}", d.serveRemoveVolume)
-	d.handle("GET", "images/json", d.serveListImages)
-	d.handle("GET", "images/{name}/json", d.serveInspectImage)
-	d.handle("POST", "images/{name}/tag", d.serveTagImage)
-	d.handle("POST", "images/prune", d.servePruneImages)
-	d.handle("DELETE", "images/{name}", d.serveRemoveImage)
-	d.handle("POST", "images/create", d.servePullImage)
-	d.handle("POST", "images/load", d.serveLoadImages)
-	d.handle("GET", "images/get", d.serveSaveImages)
+	d.handle("GET", "_ping", servePing)
+	d.handle("HEAD", "_ping", servePing)
+	d.handle("GET", "version", serveVersion)
+
+	d.handle("GET", "containers/json", serveListContainers)
+	d.handle("GET", "containers/{id}/json", serveInspectContainer)
+	d.handle("POST", "containers/create", serveCreateContainer)
+	d.handle("POST", "containers/{id}/rename", serveRenameContainer)
+	d.handle("POST", "containers/{id}/start", serveStartContainer)
+	d.handle("POST", "containers/{id}/stop", serveStopContainer)
+	d.handle("POST", "containers/{id}/kill", serveKillContainer)
+	d.handle("POST", "containers/{id}/wait", serveWaitContainer)
+	d.handle("DELETE", "containers/{id}", serveRemoveContainer)
+
+	d.handle("GET", "networks/{name}", serveInspectNetwork)
+	d.handle("POST", "networks/create", serveCreateNetwork)
+	d.handle("DELETE", "networks/{name}", serveRemoveNetwork)
+
+	d.handle("GET", "volumes", serveListVolumes)
+	d.handle("GET", "volumes/{name}", serveInspectVolume)
+	d.handle("POST", "volumes/create", serveCreateVolume)
+	d.handle("DELETE", "volumes/{name}", serveRemoveVolume)
+
+	d.handle("GET", "images/json", serveListImages)
+	d.handle("GET", "images/{name}/json", serveInspectImage)
+	d.handle("POST", "images/{name}/tag", serveTagImage)
+	d.handle("POST", "images/prune", servePruneImages)
+	d.handle("DELETE", "images/{name}", serveRemoveImage)
+	d.handle("POST", "images/create", servePullImage)
+	d.handle("POST", "images/load", serveLoadImages)
+	d.handle("GET", "images/get", serveSaveImages)
 }
 
-func (d *FakeDaemon) servePing(w http.ResponseWriter, _ *http.Request) {
+func servePing(_ *FakeDaemon, w http.ResponseWriter, _ *http.Request) {
 	fmt.Fprint(w, "OK")
 }
 
-func (d *FakeDaemon) serveVersion(w http.ResponseWriter, _ *http.Request) {
+func serveVersion(d *FakeDaemon, w http.ResponseWriter, _ *http.Request) {
 	d.writeJSON(w, d.data.getVersion())
-}
-
-func (d *FakeDaemon) serveListContainers(w http.ResponseWriter, r *http.Request) {
-	var filters map[string][]string
-	if s := r.URL.Query().Get("filters"); s != "" {
-		if err := json.Unmarshal([]byte(s), &filters); err != nil {
-			http.Error(w, "invalid filters", http.StatusBadRequest)
-			return
-		}
-	}
-	d.writeJSON(w, d.data.getContainers(filters["label"]))
-}
-
-func (d *FakeDaemon) serveInspectContainer(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	c := d.data.getContainer(id)
-	if c == nil {
-		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
-		return
-	}
-	d.writeJSON(w, c.toInfo())
-}
-
-func (d *FakeDaemon) serveCreateContainer(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Image    string
-		Hostname string
-		Labels   map[string]string
-	}
-	if !readJSON(w, r, &req) {
-		return
-	}
-	name := r.URL.Query().Get("name")
-
-	id := d.data.nextID("cont")
-	c := &Container{
-		ID:       id,
-		Image:    req.Image,
-		Hostname: req.Hostname,
-		Labels:   req.Labels,
-	}
-	if name != "" {
-		c.Names = []string{"/" + name}
-	}
-	d.data.addContainer(c)
-
-	d.writeJSON(w, struct {
-		ID string `json:"Id"`
-	}{ID: id})
-}
-
-func (d *FakeDaemon) serveRenameContainer(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	newName := r.URL.Query().Get("name")
-	if !d.data.renameContainer(id, newName) {
-		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (d *FakeDaemon) serveInspectNetwork(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	n := d.data.getNetwork(name)
-	if n == nil {
-		writeNotFound(w, fmt.Sprintf("network %s not found", name))
-		return
-	}
-	d.writeJSON(w, n.toInfo())
-}
-
-func (d *FakeDaemon) serveCreateNetwork(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Name string
-	}
-	if !readJSON(w, r, &req) {
-		return
-	}
-	id := d.data.nextID("net")
-	d.data.addNetwork(&Network{ID: id, Name: req.Name})
-
-	d.writeJSON(w, struct {
-		ID      string `json:"Id"`
-		Warning string
-	}{ID: id})
-}
-
-func (d *FakeDaemon) serveListVolumes(w http.ResponseWriter, r *http.Request) {
-	var filters map[string][]string
-	if s := r.URL.Query().Get("filters"); s != "" {
-		if err := json.Unmarshal([]byte(s), &filters); err != nil {
-			http.Error(w, "invalid filters", http.StatusBadRequest)
-			return
-		}
-	}
-	resp := struct {
-		Volumes []*docker.VolumeInfo
-	}{Volumes: d.data.getVolumes(filters["label"])}
-	d.writeJSON(w, resp)
-}
-
-func (d *FakeDaemon) serveInspectVolume(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	v := d.data.getVolume(name)
-	if v == nil {
-		writeNotFound(w, fmt.Sprintf("get %s: no such volume", name))
-		return
-	}
-	d.writeJSON(w, v.toInfo())
-}
-
-func (d *FakeDaemon) serveCreateVolume(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Name   string
-		Driver string
-		Labels map[string]string
-	}
-	if !readJSON(w, r, &req) {
-		return
-	}
-	driver := req.Driver
-	if driver == "" {
-		driver = "local"
-	}
-	v := &Volume{
-		Name:       req.Name,
-		Driver:     driver,
-		Mountpoint: "/var/lib/docker/volumes/" + req.Name + "/_data",
-		Labels:     req.Labels,
-	}
-	d.data.addVolume(v)
-
-	d.writeJSON(w, v.toInfo())
-}
-
-func (d *FakeDaemon) serveListImages(w http.ResponseWriter, _ *http.Request) {
-	d.writeJSON(w, d.data.getImages())
-}
-
-func (d *FakeDaemon) serveInspectImage(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	img := d.data.getImage(name)
-	if img == nil {
-		writeNotFound(w, fmt.Sprintf("No such image: %s", name))
-		return
-	}
-	d.writeJSON(w, img.toInfo())
-}
-
-func (d *FakeDaemon) serveTagImage(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	repo := r.URL.Query().Get("repo")
-	tag := r.URL.Query().Get("tag")
-	if !d.data.addImageTag(name, repo+":"+tag) {
-		writeNotFound(w, fmt.Sprintf("No such image: %s", name))
-		return
-	}
-	w.WriteHeader(http.StatusCreated)
-}
-
-func (d *FakeDaemon) servePruneImages(w http.ResponseWriter, _ *http.Request) {
-	// Real Docker reports deleted images and reclaimed space; the dock
-	// client decodes into struct{}, so an empty JSON object suffices.
-	d.writeJSON(w, struct{}{})
-}
-
-func (d *FakeDaemon) serveStartContainer(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if !d.data.startContainer(id) {
-		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (d *FakeDaemon) serveStopContainer(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	found, wasRunning := d.data.stopContainer(id)
-	if !found {
-		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
-		return
-	}
-	if !wasRunning {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (d *FakeDaemon) serveKillContainer(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if !d.data.containerExists(id) {
-		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (d *FakeDaemon) serveWaitContainer(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	code, ok := d.data.containerExitCode(id)
-	if !ok {
-		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
-		return
-	}
-	d.writeJSON(w, struct {
-		StatusCode int
-	}{StatusCode: code})
-}
-
-func (d *FakeDaemon) serveRemoveContainer(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if !d.data.removeContainer(id) {
-		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (d *FakeDaemon) serveRemoveNetwork(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	if !d.data.removeNetwork(name) {
-		writeNotFound(w, fmt.Sprintf("network %s not found", name))
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (d *FakeDaemon) serveRemoveVolume(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	if !d.data.removeVolume(name) {
-		writeNotFound(w, fmt.Sprintf("get %s: no such volume", name))
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (d *FakeDaemon) serveRemoveImage(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	if !d.data.removeImage(name) {
-		writeNotFound(w, fmt.Sprintf("No such image: %s", name))
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-func (d *FakeDaemon) servePullImage(w http.ResponseWriter, r *http.Request) {
-	image := r.URL.Query().Get("fromImage")
-	tag := r.URL.Query().Get("tag")
-	ref := image
-	if tag != "" {
-		ref = image + ":" + tag
-	}
-
-	setJSONContentType(w)
-	enc := json.NewEncoder(w)
-
-	if !d.data.isPullable(image) {
-		d.data.recordErr(enc.Encode(map[string]string{
-			"error": "pull access denied for " + image +
-				", repository does not exist or may require 'docker login'",
-		}))
-		return
-	}
-
-	id := d.data.nextID("img")
-	d.data.addImage(&Image{ID: id, RepoTags: []string{ref}})
-
-	d.data.recordErr(enc.Encode(map[string]string{
-		"status": "Pulling from " + image,
-	}))
-	d.data.recordErr(enc.Encode(map[string]string{
-		"status": "Status: Downloaded newer image for " + ref,
-	}))
-}
-
-func (d *FakeDaemon) serveLoadImages(w http.ResponseWriter, r *http.Request) {
-	manifest, err := ReadImageArchive(r.Body)
-	if err != nil {
-		d.data.recordErr(fmt.Errorf("load body: %w", err))
-		http.Error(w, "read body", http.StatusBadRequest)
-		return
-	}
-	setJSONContentType(w)
-	enc := json.NewEncoder(w)
-	for _, m := range manifest {
-		id := d.data.nextID("img")
-		d.data.addImage(&Image{ID: id, RepoTags: m.RepoTags})
-		for _, tag := range m.RepoTags {
-			d.data.recordErr(enc.Encode(map[string]string{
-				"stream": "Loaded image: " + tag + "\n",
-			}))
-		}
-	}
-}
-
-func (d *FakeDaemon) serveSaveImages(w http.ResponseWriter, r *http.Request) {
-	names := r.URL.Query()["names"]
-	manifest := make([]ImageManifestEntry, 0, len(names))
-	for _, name := range names {
-		tags := []string{name}
-		if img := d.data.getImage(name); img != nil {
-			tags = img.RepoTags
-		}
-		manifest = append(manifest, ImageManifestEntry{RepoTags: tags})
-	}
-	d.data.recordErr(WriteImageArchive(w, manifest))
 }
