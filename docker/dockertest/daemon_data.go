@@ -16,14 +16,23 @@ import (
 type daemonData struct {
 	mu sync.Mutex
 
-	version docker.VersionInfo
-	conts   []*Container
-	nets    []*Network
-	vols    []*Volume
-	imgs    []*Image
+	version  docker.VersionInfo
+	conts    []*Container
+	nets     []*Network
+	vols     []*Volume
+	imgs     []*Image
+	pullable map[string]bool
 
 	idSeq int
 	errs  []error
+}
+
+// newDaemonData returns a daemonData with default state: "nginx" is the
+// only image pullable from the simulated registry.
+func newDaemonData() *daemonData {
+	return &daemonData{
+		pullable: map[string]bool{"nginx": true},
+	}
 }
 
 // nextID returns an incrementing identifier with the given prefix.
@@ -297,6 +306,24 @@ func (d *daemonData) getImages() []*docker.ImageListInfo {
 		out = append(out, img.toListInfo())
 	}
 	return out
+}
+
+// allowPull marks image as pullable from the simulated registry.
+func (d *daemonData) allowPull(image string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.pullable == nil {
+		d.pullable = make(map[string]bool)
+	}
+	d.pullable[image] = true
+}
+
+// isPullable reports whether image can be pulled from the simulated
+// registry.
+func (d *daemonData) isPullable(image string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.pullable[image]
 }
 
 // addImageTag appends repoTag to the matching image's RepoTags. Returns

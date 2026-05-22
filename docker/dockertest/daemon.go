@@ -55,7 +55,7 @@ func New() (*FakeDaemon, error) {
 		tmpDir:   tmpDir,
 		SockPath: sockPath,
 		Client:   docker.NewUnixClient(sockPath),
-		data:     &daemonData{},
+		data:     newDaemonData(),
 	}
 	d.registerRoutes()
 	go func() { _ = srv.Serve(l) }()
@@ -96,6 +96,10 @@ func (d *FakeDaemon) AddVolume(v *Volume) { d.data.addVolume(v) }
 // pointer is stored as-is; later mutations to *img are visible to the fake.
 func (d *FakeDaemon) AddImage(img *Image) { d.data.addImage(img) }
 
+// AllowPull marks image as pullable from the simulated registry. By
+// default only "nginx" is pullable.
+func (d *FakeDaemon) AllowPull(image string) { d.data.allowPull(image) }
+
 // writeJSON wraps the package-level writeJSON, recording any encode error
 // via the data's error recorder.
 func (d *FakeDaemon) writeJSON(w http.ResponseWriter, body any) {
@@ -131,6 +135,9 @@ func (d *FakeDaemon) registerRoutes() {
 	d.handle("POST", "images/{name}/tag", d.serveTagImage)
 	d.handle("POST", "images/prune", d.servePruneImages)
 	d.handle("DELETE", "images/{name}", d.serveRemoveImage)
+	d.handle("POST", "images/create", d.servePullImage)
+	d.handle("POST", "images/load", d.serveLoadImages)
+	d.handle("GET", "images/get", d.serveSaveImages)
 }
 
 func (d *FakeDaemon) servePing(w http.ResponseWriter, _ *http.Request) {
@@ -383,4 +390,67 @@ func (d *FakeDaemon) serveRemoveImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (d *FakeDaemon) servePullImage(w http.ResponseWriter, r *http.Request) {
+	image := r.URL.Query().Get("fromImage")
+	tag := r.URL.Query().Get("tag")
+	ref := image
+	if tag != "" {
+		ref = image + ":" + tag
+	}
+
+	setJSONContentType(w)
+	enc := json.NewEncoder(w)
+
+	if !d.data.isPullable(image) {
+		d.data.recordErr(enc.Encode(map[string]string{
+			"error": "pull access denied for " + image +
+				", repository does not exist or may require 'docker login'",
+		}))
+		return
+	}
+
+	id := d.data.nextID("img")
+	d.data.addImage(&Image{ID: id, RepoTags: []string{ref}})
+
+	d.data.recordErr(enc.Encode(map[string]string{
+		"status": "Pulling from " + image,
+	}))
+	d.data.recordErr(enc.Encode(map[string]string{
+		"status": "Status: Downloaded newer image for " + ref,
+	}))
+}
+
+func (d *FakeDaemon) serveLoadImages(w http.ResponseWriter, r *http.Request) {
+	manifest, err := ReadImageArchive(r.Body)
+	if err != nil {
+		d.data.recordErr(fmt.Errorf("load body: %w", err))
+		http.Error(w, "read body", http.StatusBadRequest)
+		return
+	}
+	setJSONContentType(w)
+	enc := json.NewEncoder(w)
+	for _, m := range manifest {
+		id := d.data.nextID("img")
+		d.data.addImage(&Image{ID: id, RepoTags: m.RepoTags})
+		for _, tag := range m.RepoTags {
+			d.data.recordErr(enc.Encode(map[string]string{
+				"stream": "Loaded image: " + tag + "\n",
+			}))
+		}
+	}
+}
+
+func (d *FakeDaemon) serveSaveImages(w http.ResponseWriter, r *http.Request) {
+	names := r.URL.Query()["names"]
+	manifest := make([]ImageManifestEntry, 0, len(names))
+	for _, name := range names {
+		tags := []string{name}
+		if img := d.data.getImage(name); img != nil {
+			tags = img.RepoTags
+		}
+		manifest = append(manifest, ImageManifestEntry{RepoTags: tags})
+	}
+	d.data.recordErr(WriteImageArchive(w, manifest))
 }

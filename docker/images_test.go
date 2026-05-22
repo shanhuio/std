@@ -1,6 +1,7 @@
 package docker_test
 
 import (
+	"bytes"
 	"sort"
 	"testing"
 
@@ -213,6 +214,129 @@ func TestPruneImages(t *testing.T) {
 	}
 	if err := docker.PruneImages(d.Client, &docker.PruneImagesOption{Unused: true}); err != nil {
 		t.Fatalf("PruneImages(Unused): %v", err)
+	}
+}
+
+func TestPullImage(t *testing.T) {
+	d := newDaemon(t)
+	if err := docker.PullImage(d.Client, "nginx", "latest"); err != nil {
+		t.Fatalf("PullImage: %v", err)
+	}
+	got, err := docker.InspectImage(d.Client, "nginx:latest")
+	if err != nil {
+		t.Fatalf("InspectImage after pull: %v", err)
+	}
+	if len(got.RepoTags) != 1 || got.RepoTags[0] != "nginx:latest" {
+		t.Errorf("RepoTags: got %v, want [nginx:latest]", got.RepoTags)
+	}
+}
+
+func TestPullImageNoTag(t *testing.T) {
+	d := newDaemon(t)
+	if err := docker.PullImage(d.Client, "nginx", ""); err != nil {
+		t.Fatalf("PullImage: %v", err)
+	}
+	if _, err := docker.InspectImage(d.Client, "nginx"); err != nil {
+		t.Errorf("InspectImage(nginx): %v", err)
+	}
+}
+
+func TestPullImageNotAllowed(t *testing.T) {
+	d := newDaemon(t)
+	err := docker.PullImage(d.Client, "notreal", "latest")
+	if err == nil {
+		t.Fatal("PullImage: expected error, got nil")
+	}
+	if !errcode.IsInternal(err) {
+		t.Errorf("expected Internal, got %v", err)
+	}
+	// Image should not have been recorded.
+	if _, ierr := docker.InspectImage(d.Client, "notreal:latest"); ierr == nil {
+		t.Errorf("InspectImage(notreal:latest): expected error, got nil")
+	}
+}
+
+func TestAllowPull(t *testing.T) {
+	d := newDaemon(t)
+	d.AllowPull("busybox")
+	if err := docker.PullImage(d.Client, "busybox", "1"); err != nil {
+		t.Fatalf("PullImage: %v", err)
+	}
+	if _, err := docker.InspectImage(d.Client, "busybox:1"); err != nil {
+		t.Errorf("InspectImage(busybox:1): %v", err)
+	}
+}
+
+func TestLoadImages(t *testing.T) {
+	var buf bytes.Buffer
+	if err := dockertest.WriteImageArchive(&buf, []dockertest.ImageManifestEntry{
+		{RepoTags: []string{"nginx:latest"}},
+	}); err != nil {
+		t.Fatalf("WriteImageArchive: %v", err)
+	}
+
+	d := newDaemon(t)
+	if err := docker.LoadImages(d.Client, &buf); err != nil {
+		t.Fatalf("LoadImages: %v", err)
+	}
+	got, err := docker.InspectImage(d.Client, "nginx:latest")
+	if err != nil {
+		t.Fatalf("InspectImage after load: %v", err)
+	}
+	if len(got.RepoTags) != 1 || got.RepoTags[0] != "nginx:latest" {
+		t.Errorf("RepoTags: got %v, want [nginx:latest]", got.RepoTags)
+	}
+}
+
+func TestSaveImages(t *testing.T) {
+	d := newDaemon(t)
+	d.AddImage(&dockertest.Image{
+		ID:       "sha256:nginxid",
+		RepoTags: []string{"nginx:latest"},
+	})
+	d.AddImage(&dockertest.Image{
+		ID:       "sha256:postgresid",
+		RepoTags: []string{"postgres:15"},
+	})
+
+	var out bytes.Buffer
+	if err := docker.SaveImages(d.Client, []string{"nginx:latest", "postgres:15"}, &out); err != nil {
+		t.Fatalf("SaveImages: %v", err)
+	}
+	manifest, err := dockertest.ReadImageArchive(&out)
+	if err != nil {
+		t.Fatalf("ReadImageArchive: %v", err)
+	}
+	if len(manifest) != 2 {
+		t.Fatalf("manifest: got %d entries, want 2", len(manifest))
+	}
+	wantTags := [][]string{{"nginx:latest"}, {"postgres:15"}}
+	for i, e := range manifest {
+		if len(e.RepoTags) != len(wantTags[i]) || e.RepoTags[0] != wantTags[i][0] {
+			t.Errorf("entry %d RepoTags: got %v, want %v", i, e.RepoTags, wantTags[i])
+		}
+	}
+}
+
+func TestSaveLoadRoundtrip(t *testing.T) {
+	d1 := newDaemon(t)
+	d1.AddImage(&dockertest.Image{ID: "img1", RepoTags: []string{"nginx:latest"}})
+
+	var buf bytes.Buffer
+	if err := docker.SaveImages(d1.Client, []string{"nginx:latest"}, &buf); err != nil {
+		t.Fatalf("SaveImages: %v", err)
+	}
+
+	d2 := newDaemon(t)
+	if err := docker.LoadImages(d2.Client, &buf); err != nil {
+		t.Fatalf("LoadImages: %v", err)
+	}
+	infos, err := docker.ListImages(d2.Client)
+	if err != nil {
+		t.Fatalf("ListImages: %v", err)
+	}
+	if len(infos) != 1 || len(infos[0].RepoTags) != 1 || infos[0].RepoTags[0] != "nginx:latest" {
+		t.Errorf("ListImages: got %+v, want one nginx:latest", infos)
 	}
 }
 
