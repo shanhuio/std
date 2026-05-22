@@ -35,6 +35,7 @@ type FakeDaemon struct {
 	version docker.VersionInfo
 	conts   []*Container
 	nets    []*Network
+	vols    []*Volume
 }
 
 // New starts a FakeDaemon. The server is shut down when the test ends.
@@ -72,6 +73,7 @@ func (d *FakeDaemon) registerRoutes() {
 	d.handle("GET", "version", d.serveVersion)
 	d.handle("GET", "containers/json", d.serveListContainers)
 	d.handle("GET", "networks/{name}", d.serveInspectNetwork)
+	d.handle("GET", "volumes", d.serveListVolumes)
 }
 
 // SetVersion sets the version info returned by GET /version.
@@ -114,6 +116,26 @@ func (d *FakeDaemon) getNetwork(nameOrID string) *Network {
 		}
 	}
 	return nil
+}
+
+// AddVolume adds v to the set of volumes known to the fake daemon. The
+// pointer is stored as-is; later mutations to *v are visible to the fake.
+func (d *FakeDaemon) AddVolume(v *Volume) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.vols = append(d.vols, v)
+}
+
+func (d *FakeDaemon) getVolumes(wantLabels []string) []*docker.VolumeInfo {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	matched := make([]*docker.VolumeInfo, 0, len(d.vols))
+	for _, v := range d.vols {
+		if matchesAllLabels(v.Labels, wantLabels) {
+			matched = append(matched, v.toInfo())
+		}
+	}
+	return matched
 }
 
 func (d *FakeDaemon) servePing(w http.ResponseWriter, _ *http.Request) {
@@ -166,6 +188,25 @@ func (d *FakeDaemon) serveInspectNetwork(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(n.toInfo()); err != nil {
 		d.t.Errorf("encode network: %v", err)
+	}
+}
+
+func (d *FakeDaemon) serveListVolumes(w http.ResponseWriter, r *http.Request) {
+	var filters map[string][]string
+	if s := r.URL.Query().Get("filters"); s != "" {
+		if err := json.Unmarshal([]byte(s), &filters); err != nil {
+			http.Error(w, "invalid filters", http.StatusBadRequest)
+			return
+		}
+	}
+	matched := d.getVolumes(filters["label"])
+
+	w.Header().Set("Content-Type", "application/json")
+	resp := struct {
+		Volumes []*docker.VolumeInfo
+	}{Volumes: matched}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		d.t.Errorf("encode volumes: %v", err)
 	}
 }
 
