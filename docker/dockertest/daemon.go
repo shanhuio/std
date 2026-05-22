@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"path"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -61,14 +62,14 @@ func New(t *testing.T) *FakeDaemon {
 }
 
 func (d *FakeDaemon) handle(method, p string, h http.HandlerFunc) {
-	d.mux.HandleFunc(method+" "+docker.APIVersion+p, h)
+	d.mux.HandleFunc(method+" "+path.Join(docker.APIVersion, p), h)
 }
 
 func (d *FakeDaemon) registerRoutes() {
-	d.handle("GET", "/_ping", d.servePing)
-	d.handle("HEAD", "/_ping", d.servePing)
-	d.handle("GET", "/version", d.serveVersion)
-	d.handle("GET", "/containers/json", d.serveListContainers)
+	d.handle("GET", "_ping", d.servePing)
+	d.handle("HEAD", "_ping", d.servePing)
+	d.handle("GET", "version", d.serveVersion)
+	d.handle("GET", "containers/json", d.serveListContainers)
 }
 
 // SetVersion sets the version info returned by GET /version.
