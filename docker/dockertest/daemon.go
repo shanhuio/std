@@ -101,6 +101,12 @@ func (d *FakeDaemon) recordErr(err error) {
 	d.errs = append(d.errs, err)
 }
 
+// writeJSON wraps the package-level writeJSON, recording any encode error
+// via recordErr.
+func (d *FakeDaemon) writeJSON(w http.ResponseWriter, body any) {
+	d.recordErr(writeJSON(w, body))
+}
+
 func (d *FakeDaemon) handle(method, p string, h http.HandlerFunc) {
 	d.mux.HandleFunc(method+" "+path.Join(docker.APIVersion, p), h)
 }
@@ -214,7 +220,7 @@ func (d *FakeDaemon) servePing(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (d *FakeDaemon) serveVersion(w http.ResponseWriter, _ *http.Request) {
-	d.recordErr(writeJSON(w, d.getVersion()))
+	d.writeJSON(w, d.getVersion())
 }
 
 func (d *FakeDaemon) getContainers(wantLabels []string) []*docker.ContListInfo {
@@ -238,7 +244,7 @@ func (d *FakeDaemon) serveListContainers(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	matched := d.getContainers(filters["label"])
-	d.recordErr(writeJSON(w, matched))
+	d.writeJSON(w, matched)
 }
 
 func (d *FakeDaemon) serveInspectNetwork(w http.ResponseWriter, r *http.Request) {
@@ -248,7 +254,7 @@ func (d *FakeDaemon) serveInspectNetwork(w http.ResponseWriter, r *http.Request)
 		writeNotFound(w, fmt.Sprintf("network %s not found", name))
 		return
 	}
-	d.recordErr(writeJSON(w, n.toInfo()))
+	d.writeJSON(w, n.toInfo())
 }
 
 func (d *FakeDaemon) serveListVolumes(w http.ResponseWriter, r *http.Request) {
@@ -263,11 +269,11 @@ func (d *FakeDaemon) serveListVolumes(w http.ResponseWriter, r *http.Request) {
 	resp := struct {
 		Volumes []*docker.VolumeInfo
 	}{Volumes: matched}
-	d.recordErr(writeJSON(w, resp))
+	d.writeJSON(w, resp)
 }
 
 func (d *FakeDaemon) serveListImages(w http.ResponseWriter, _ *http.Request) {
-	d.recordErr(writeJSON(w, d.getImages()))
+	d.writeJSON(w, d.getImages())
 }
 
 func (d *FakeDaemon) serveInspectImage(w http.ResponseWriter, r *http.Request) {
@@ -277,5 +283,5 @@ func (d *FakeDaemon) serveInspectImage(w http.ResponseWriter, r *http.Request) {
 		writeNotFound(w, fmt.Sprintf("No such image: %s", name))
 		return
 	}
-	d.recordErr(writeJSON(w, img.toInfo()))
+	d.writeJSON(w, img.toInfo())
 }
