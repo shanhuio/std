@@ -180,6 +180,35 @@ func (d *daemonData) containerExitCode(idOrName string) (int, bool) {
 	return c.ExitCode, true
 }
 
+// containerWriteFile sets path -> content on the matching container's
+// Files map. Returns false if no such container exists.
+func (d *daemonData) containerWriteFile(idOrName, path string, content []byte) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	c := d.findContainer(idOrName)
+	if c == nil {
+		return false
+	}
+	if c.Files == nil {
+		c.Files = make(map[string][]byte)
+	}
+	c.Files[path] = content
+	return true
+}
+
+// containerReadFile returns the file content at path from the matching
+// container. Returns (nil, false) if no such container or no such file.
+func (d *daemonData) containerReadFile(idOrName, path string) ([]byte, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	c := d.findContainer(idOrName)
+	if c == nil {
+		return nil, false
+	}
+	bs, ok := c.Files[path]
+	return bs, ok
+}
+
 // removeContainer drops the matching container from the set. Returns false
 // if not found.
 func (d *daemonData) removeContainer(idOrName string) bool {

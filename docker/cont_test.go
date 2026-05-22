@@ -1,7 +1,9 @@
 package docker_test
 
 import (
+	"archive/tar"
 	"bytes"
+	"io"
 	"testing"
 
 	"shanhu.io/std/docker"
@@ -366,6 +368,129 @@ func TestContExec(t *testing.T) {
 		_, err := docker.NewCont(d.Client, "missing").Exec("echo hi")
 		if err == nil {
 			t.Fatal("Exec: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+}
+
+func TestContArchive(t *testing.T) {
+	t.Run("copy out file", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{
+			ID: "abc",
+			Files: map[string][]byte{
+				"/etc/hostname": []byte("myhost\n"),
+			},
+		})
+
+		var buf bytes.Buffer
+		if err := docker.NewCont(d.Client, "abc").CopyOutTar("/etc/hostname", &buf); err != nil {
+			t.Fatalf("CopyOutTar: %v", err)
+		}
+		tr := tar.NewReader(&buf)
+		hdr, err := tr.Next()
+		if err != nil {
+			t.Fatalf("read tar: %v", err)
+		}
+		if hdr.Name != "hostname" {
+			t.Errorf("entry name: got %q, want %q", hdr.Name, "hostname")
+		}
+		got, err := io.ReadAll(tr)
+		if err != nil {
+			t.Fatalf("read tar body: %v", err)
+		}
+		if string(got) != "myhost\n" {
+			t.Errorf("content: got %q, want %q", got, "myhost\n")
+		}
+	})
+
+	t.Run("ReadContFile", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{
+			ID: "abc",
+			Files: map[string][]byte{
+				"/etc/hostname": []byte("myhost\n"),
+			},
+		})
+
+		bs, err := docker.ReadContFile(docker.NewCont(d.Client, "abc"), "/etc/hostname")
+		if err != nil {
+			t.Fatalf("ReadContFile: %v", err)
+		}
+		if string(bs) != "myhost\n" {
+			t.Errorf("content: got %q, want %q", bs, "myhost\n")
+		}
+	})
+
+	t.Run("ReadContFile missing", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc"})
+		_, err := docker.ReadContFile(docker.NewCont(d.Client, "abc"), "/missing")
+		if err == nil {
+			t.Fatal("ReadContFile: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+
+	t.Run("copy in then read back", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc"})
+
+		var buf bytes.Buffer
+		tw := tar.NewWriter(&buf)
+		const payload = "hello world"
+		if err := tw.WriteHeader(&tar.Header{
+			Name:     "data.txt",
+			Mode:     0644,
+			Size:     int64(len(payload)),
+			Typeflag: tar.TypeReg,
+		}); err != nil {
+			t.Fatalf("tar header: %v", err)
+		}
+		if _, err := tw.Write([]byte(payload)); err != nil {
+			t.Fatalf("tar write: %v", err)
+		}
+		if err := tw.Close(); err != nil {
+			t.Fatalf("tar close: %v", err)
+		}
+
+		if err := docker.NewCont(d.Client, "abc").CopyInTar(&buf, "/opt"); err != nil {
+			t.Fatalf("CopyInTar: %v", err)
+		}
+
+		bs, err := docker.ReadContFile(docker.NewCont(d.Client, "abc"), "/opt/data.txt")
+		if err != nil {
+			t.Fatalf("ReadContFile after CopyIn: %v", err)
+		}
+		if string(bs) != payload {
+			t.Errorf("content: got %q, want %q", bs, payload)
+		}
+	})
+
+	t.Run("copy in container not found", func(t *testing.T) {
+		d := newDaemon(t)
+		var buf bytes.Buffer
+		tw := tar.NewWriter(&buf)
+		_ = tw.Close()
+		err := docker.NewCont(d.Client, "missing").CopyInTar(&buf, "/opt")
+		if err == nil {
+			t.Fatal("CopyInTar: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+
+	t.Run("copy out container not found", func(t *testing.T) {
+		d := newDaemon(t)
+		var buf bytes.Buffer
+		err := docker.NewCont(d.Client, "missing").CopyOutTar("/etc/hostname", &buf)
+		if err == nil {
+			t.Fatal("CopyOutTar: expected error, got nil")
 		}
 		if !errcode.IsNotFound(err) {
 			t.Errorf("expected NotFound, got %v", err)

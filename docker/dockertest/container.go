@@ -17,6 +17,11 @@ type Container struct {
 	ExitCode int
 	Error    string
 	Mounts   []ContainerMount
+
+	// Files models the container's filesystem as absolute path ->
+	// content. Populated by tests for CopyOutTar/ReadContFile reads, and
+	// updated by CopyInTar requests.
+	Files map[string][]byte
 }
 
 // ContainerMount is one mount on a Container, exposed under

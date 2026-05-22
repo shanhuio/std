@@ -1,9 +1,12 @@
 package dockertest
 
 import (
+	"archive/tar"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"path"
 )
 
 func serveListContainers(d *FakeDaemon, w http.ResponseWriter, r *http.Request) {
@@ -116,4 +119,62 @@ func serveRemoveContainer(d *FakeDaemon, w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func serveCopyInArchive(d *FakeDaemon, w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !d.data.containerExists(id) {
+		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
+		return
+	}
+	basePath := r.URL.Query().Get("path")
+	tr := tar.NewReader(r.Body)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			http.Error(w, "read tar: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if hdr.Typeflag != tar.TypeReg {
+			continue
+		}
+		bs, err := io.ReadAll(tr)
+		if err != nil {
+			http.Error(w, "read entry: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		d.data.containerWriteFile(id, path.Join(basePath, hdr.Name), bs)
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func serveCopyOutArchive(d *FakeDaemon, w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !d.data.containerExists(id) {
+		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
+		return
+	}
+	p := r.URL.Query().Get("path")
+	content, ok := d.data.containerReadFile(id, p)
+	if !ok {
+		writeNotFound(w, fmt.Sprintf("Could not find the file %s in container %s", p, id))
+		return
+	}
+	tw := tar.NewWriter(w)
+	defer func() { d.data.recordErr(tw.Close()) }()
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     path.Base(p),
+		Mode:     0644,
+		Size:     int64(len(content)),
+		Typeflag: tar.TypeReg,
+	}); err != nil {
+		d.data.recordErr(fmt.Errorf("write tar header: %w", err))
+		return
+	}
+	if _, err := tw.Write(content); err != nil {
+		d.data.recordErr(fmt.Errorf("write tar entry: %w", err))
+	}
 }
