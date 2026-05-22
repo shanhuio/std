@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 
@@ -36,6 +37,7 @@ type FakeDaemon struct {
 	conts   []*Container
 	nets    []*Network
 	vols    []*Volume
+	imgs    []*Image
 }
 
 // New starts a FakeDaemon. The server is shut down when the test ends.
@@ -74,6 +76,8 @@ func (d *FakeDaemon) registerRoutes() {
 	d.handle("GET", "containers/json", d.serveListContainers)
 	d.handle("GET", "networks/{name}", d.serveInspectNetwork)
 	d.handle("GET", "volumes", d.serveListVolumes)
+	d.handle("GET", "images/json", d.serveListImages)
+	d.handle("GET", "images/{name}/json", d.serveInspectImage)
 }
 
 // SetVersion sets the version info returned by GET /version.
@@ -136,6 +140,37 @@ func (d *FakeDaemon) getVolumes(wantLabels []string) []*docker.VolumeInfo {
 		}
 	}
 	return matched
+}
+
+// AddImage adds img to the set of images known to the fake daemon. The
+// pointer is stored as-is; later mutations to *img are visible to the fake.
+func (d *FakeDaemon) AddImage(img *Image) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.imgs = append(d.imgs, img)
+}
+
+func (d *FakeDaemon) getImages() []*docker.ImageListInfo {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make([]*docker.ImageListInfo, 0, len(d.imgs))
+	for _, img := range d.imgs {
+		out = append(out, img.toListInfo())
+	}
+	return out
+}
+
+// getImage returns the image matching nameOrID by ID or by any of its
+// RepoTags, or nil if none match.
+func (d *FakeDaemon) getImage(nameOrID string) *Image {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, img := range d.imgs {
+		if img.ID == nameOrID || slices.Contains(img.RepoTags, nameOrID) {
+			return img
+		}
+	}
+	return nil
 }
 
 func (d *FakeDaemon) servePing(w http.ResponseWriter, _ *http.Request) {
@@ -207,6 +242,26 @@ func (d *FakeDaemon) serveListVolumes(w http.ResponseWriter, r *http.Request) {
 	}{Volumes: matched}
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		d.t.Errorf("encode volumes: %v", err)
+	}
+}
+
+func (d *FakeDaemon) serveListImages(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(d.getImages()); err != nil {
+		d.t.Errorf("encode images: %v", err)
+	}
+}
+
+func (d *FakeDaemon) serveInspectImage(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	img := d.getImage(name)
+	if img == nil {
+		writeNotFound(w, fmt.Sprintf("No such image: %s", name))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(img.toInfo()); err != nil {
+		d.t.Errorf("encode image: %v", err)
 	}
 }
 
