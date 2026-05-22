@@ -151,6 +151,166 @@ func TestCreateCont(t *testing.T) {
 	})
 }
 
+func TestContLifecycle(t *testing.T) {
+	t.Run("start", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc123"})
+		c := docker.NewCont(d.Client, "abc123")
+		if err := c.Start(); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		got, err := c.Inspect()
+		if err != nil {
+			t.Fatalf("Inspect: %v", err)
+		}
+		if !got.State.Running {
+			t.Errorf("State.Running: got false, want true")
+		}
+	})
+
+	t.Run("start not found", func(t *testing.T) {
+		d := newDaemon(t)
+		err := docker.NewCont(d.Client, "missing").Start()
+		if err == nil {
+			t.Fatal("Start: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+
+	t.Run("stop running", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc123", Running: true})
+		c := docker.NewCont(d.Client, "abc123")
+		if err := c.Stop(); err != nil {
+			t.Fatalf("Stop: %v", err)
+		}
+		got, _ := c.Inspect()
+		if got.State.Running {
+			t.Errorf("State.Running: got true, want false")
+		}
+	})
+
+	t.Run("stop already stopped", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc123", Running: false})
+		// Stop returns nil (not an error) for an already-stopped container
+		// because the dock client special-cases 304 Not Modified.
+		if err := docker.NewCont(d.Client, "abc123").Stop(); err != nil {
+			t.Fatalf("Stop already-stopped: %v", err)
+		}
+	})
+
+	t.Run("stop not found", func(t *testing.T) {
+		d := newDaemon(t)
+		err := docker.NewCont(d.Client, "missing").Stop()
+		if err == nil {
+			t.Fatal("Stop: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+
+	t.Run("send SIGINT", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc123", Running: true})
+		if err := docker.NewCont(d.Client, "abc123").SendSIGINT(); err != nil {
+			t.Fatalf("SendSIGINT: %v", err)
+		}
+	})
+
+	t.Run("send SIGINT not found", func(t *testing.T) {
+		d := newDaemon(t)
+		err := docker.NewCont(d.Client, "missing").SendSIGINT()
+		if err == nil {
+			t.Fatal("SendSIGINT: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+
+	t.Run("wait returns exit code", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc123", ExitCode: 42})
+		code, err := docker.NewCont(d.Client, "abc123").Wait(docker.NotRunning)
+		if err != nil {
+			t.Fatalf("Wait: %v", err)
+		}
+		if code != 42 {
+			t.Errorf("StatusCode: got %d, want 42", code)
+		}
+	})
+
+	t.Run("wait not found", func(t *testing.T) {
+		d := newDaemon(t)
+		_, err := docker.NewCont(d.Client, "missing").Wait(docker.NotRunning)
+		if err == nil {
+			t.Fatal("Wait: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+
+	t.Run("drop", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc123", Running: true})
+		c := docker.NewCont(d.Client, "abc123")
+		if err := c.Drop(); err != nil {
+			t.Fatalf("Drop: %v", err)
+		}
+		ok, err := c.Exists()
+		if err != nil {
+			t.Fatalf("Exists: %v", err)
+		}
+		if ok {
+			t.Errorf("Exists: got true after Drop, want false")
+		}
+	})
+}
+
+func TestContRemove(t *testing.T) {
+	t.Run("remove", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc123"})
+		c := docker.NewCont(d.Client, "abc123")
+		if err := c.Remove(); err != nil {
+			t.Fatalf("Remove: %v", err)
+		}
+		ok, _ := c.Exists()
+		if ok {
+			t.Errorf("Exists: got true after Remove, want false")
+		}
+	})
+
+	t.Run("force remove", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc123", Running: true})
+		c := docker.NewCont(d.Client, "abc123")
+		if err := c.ForceRemove(); err != nil {
+			t.Fatalf("ForceRemove: %v", err)
+		}
+		ok, _ := c.Exists()
+		if ok {
+			t.Errorf("Exists: got true after ForceRemove, want false")
+		}
+	})
+
+	t.Run("remove not found", func(t *testing.T) {
+		d := newDaemon(t)
+		err := docker.NewCont(d.Client, "missing").Remove()
+		if err == nil {
+			t.Fatal("Remove: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+}
+
 func TestRenameCont(t *testing.T) {
 	t.Run("found", func(t *testing.T) {
 		d := newDaemon(t)

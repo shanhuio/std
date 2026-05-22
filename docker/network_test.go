@@ -94,3 +94,31 @@ func TestCreateNetwork(t *testing.T) {
 		t.Errorf("ID: empty, want non-empty")
 	}
 }
+
+func TestRemoveNetwork(t *testing.T) {
+	t.Run("found", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddNetwork(&dockertest.Network{ID: "net1", Name: "frontend"})
+		if err := docker.RemoveNetwork(d.Client, "frontend"); err != nil {
+			t.Fatalf("RemoveNetwork: %v", err)
+		}
+		ok, err := docker.HasNetwork(d.Client, "frontend")
+		if err != nil {
+			t.Fatalf("HasNetwork: %v", err)
+		}
+		if ok {
+			t.Errorf("HasNetwork: got true after Remove, want false")
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		d := newDaemon(t)
+		err := docker.RemoveNetwork(d.Client, "missing")
+		if err == nil {
+			t.Fatal("RemoveNetwork: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+}

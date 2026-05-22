@@ -215,3 +215,41 @@ func TestPruneImages(t *testing.T) {
 		t.Fatalf("PruneImages(Unused): %v", err)
 	}
 }
+
+func TestRemoveImage(t *testing.T) {
+	t.Run("by tag", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddImage(&dockertest.Image{
+			ID:       "sha256:nginxid",
+			RepoTags: []string{"nginx:latest"},
+		})
+		if err := docker.RemoveImage(d.Client, "nginx:latest", &docker.RemoveImageOptions{}); err != nil {
+			t.Fatalf("RemoveImage: %v", err)
+		}
+		if _, err := docker.InspectImage(d.Client, "nginx:latest"); err == nil {
+			t.Errorf("InspectImage after Remove: expected error, got nil")
+		}
+	})
+
+	t.Run("force", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddImage(&dockertest.Image{
+			ID:       "sha256:nginxid",
+			RepoTags: []string{"nginx:latest"},
+		})
+		if err := docker.RemoveImage(d.Client, "nginx:latest", &docker.RemoveImageOptions{Force: true, NoPrune: true}); err != nil {
+			t.Fatalf("RemoveImage(Force): %v", err)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		d := newDaemon(t)
+		err := docker.RemoveImage(d.Client, "missing", &docker.RemoveImageOptions{})
+		if err == nil {
+			t.Fatal("RemoveImage: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+}

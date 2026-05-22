@@ -210,3 +210,27 @@ func TestCreateVolume(t *testing.T) {
 		}
 	})
 }
+
+func TestRemoveVolume(t *testing.T) {
+	t.Run("found", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddVolume(&dockertest.Volume{Name: "data", Driver: "local"})
+		if err := docker.RemoveVolume(d.Client, "data"); err != nil {
+			t.Fatalf("RemoveVolume: %v", err)
+		}
+		if _, err := docker.InspectVolume(d.Client, "data"); err == nil {
+			t.Errorf("InspectVolume after Remove: expected error, got nil")
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		d := newDaemon(t)
+		err := docker.RemoveVolume(d.Client, "missing")
+		if err == nil {
+			t.Fatal("RemoveVolume: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+}

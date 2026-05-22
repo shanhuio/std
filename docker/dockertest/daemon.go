@@ -114,15 +114,23 @@ func (d *FakeDaemon) registerRoutes() {
 	d.handle("GET", "containers/{id}/json", d.serveInspectContainer)
 	d.handle("POST", "containers/create", d.serveCreateContainer)
 	d.handle("POST", "containers/{id}/rename", d.serveRenameContainer)
+	d.handle("POST", "containers/{id}/start", d.serveStartContainer)
+	d.handle("POST", "containers/{id}/stop", d.serveStopContainer)
+	d.handle("POST", "containers/{id}/kill", d.serveKillContainer)
+	d.handle("POST", "containers/{id}/wait", d.serveWaitContainer)
+	d.handle("DELETE", "containers/{id}", d.serveRemoveContainer)
 	d.handle("GET", "networks/{name}", d.serveInspectNetwork)
 	d.handle("POST", "networks/create", d.serveCreateNetwork)
+	d.handle("DELETE", "networks/{name}", d.serveRemoveNetwork)
 	d.handle("GET", "volumes", d.serveListVolumes)
 	d.handle("GET", "volumes/{name}", d.serveInspectVolume)
 	d.handle("POST", "volumes/create", d.serveCreateVolume)
+	d.handle("DELETE", "volumes/{name}", d.serveRemoveVolume)
 	d.handle("GET", "images/json", d.serveListImages)
 	d.handle("GET", "images/{name}/json", d.serveInspectImage)
 	d.handle("POST", "images/{name}/tag", d.serveTagImage)
 	d.handle("POST", "images/prune", d.servePruneImages)
+	d.handle("DELETE", "images/{name}", d.serveRemoveImage)
 }
 
 func (d *FakeDaemon) servePing(w http.ResponseWriter, _ *http.Request) {
@@ -295,4 +303,84 @@ func (d *FakeDaemon) servePruneImages(w http.ResponseWriter, _ *http.Request) {
 	// Real Docker reports deleted images and reclaimed space; the dock
 	// client decodes into struct{}, so an empty JSON object suffices.
 	d.writeJSON(w, struct{}{})
+}
+
+func (d *FakeDaemon) serveStartContainer(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !d.data.startContainer(id) {
+		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (d *FakeDaemon) serveStopContainer(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	found, wasRunning := d.data.stopContainer(id)
+	if !found {
+		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
+		return
+	}
+	if !wasRunning {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (d *FakeDaemon) serveKillContainer(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !d.data.containerExists(id) {
+		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (d *FakeDaemon) serveWaitContainer(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	code, ok := d.data.containerExitCode(id)
+	if !ok {
+		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
+		return
+	}
+	d.writeJSON(w, struct {
+		StatusCode int
+	}{StatusCode: code})
+}
+
+func (d *FakeDaemon) serveRemoveContainer(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !d.data.removeContainer(id) {
+		writeNotFound(w, fmt.Sprintf("No such container: %s", id))
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (d *FakeDaemon) serveRemoveNetwork(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !d.data.removeNetwork(name) {
+		writeNotFound(w, fmt.Sprintf("network %s not found", name))
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (d *FakeDaemon) serveRemoveVolume(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !d.data.removeVolume(name) {
+		writeNotFound(w, fmt.Sprintf("get %s: no such volume", name))
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (d *FakeDaemon) serveRemoveImage(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !d.data.removeImage(name) {
+		writeNotFound(w, fmt.Sprintf("No such image: %s", name))
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }

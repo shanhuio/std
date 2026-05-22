@@ -123,6 +123,73 @@ func (d *daemonData) renameContainer(idOrName, newName string) bool {
 	return true
 }
 
+// startContainer marks the container as running. Returns false if not found.
+func (d *daemonData) startContainer(idOrName string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	c := d.findContainer(idOrName)
+	if c == nil {
+		return false
+	}
+	c.Running = true
+	return true
+}
+
+// stopContainer marks the container as not running. Returns (found,
+// wasRunning).
+func (d *daemonData) stopContainer(idOrName string) (found, wasRunning bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	c := d.findContainer(idOrName)
+	if c == nil {
+		return false, false
+	}
+	wasRunning = c.Running
+	c.Running = false
+	return true, wasRunning
+}
+
+// containerExists reports whether a container with the given ID or name
+// exists.
+func (d *daemonData) containerExists(idOrName string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.findContainer(idOrName) != nil
+}
+
+// containerExitCode returns the ExitCode of the matching container, or
+// (0, false) if not found.
+func (d *daemonData) containerExitCode(idOrName string) (int, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	c := d.findContainer(idOrName)
+	if c == nil {
+		return 0, false
+	}
+	return c.ExitCode, true
+}
+
+// removeContainer drops the matching container from the set. Returns false
+// if not found.
+func (d *daemonData) removeContainer(idOrName string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	needle := strings.TrimPrefix(idOrName, "/")
+	for i, c := range d.conts {
+		if c.ID == idOrName {
+			d.conts = slices.Delete(d.conts, i, i+1)
+			return true
+		}
+		for _, n := range c.Names {
+			if strings.TrimPrefix(n, "/") == needle {
+				d.conts = slices.Delete(d.conts, i, i+1)
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Networks --------------------------------------------------------------
 
 func (d *daemonData) addNetwork(n *Network) {
@@ -140,6 +207,18 @@ func (d *daemonData) getNetwork(nameOrID string) *Network {
 		}
 	}
 	return nil
+}
+
+func (d *daemonData) removeNetwork(nameOrID string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for i, n := range d.nets {
+		if n.Name == nameOrID || n.ID == nameOrID {
+			d.nets = slices.Delete(d.nets, i, i+1)
+			return true
+		}
+	}
+	return false
 }
 
 // Volumes ---------------------------------------------------------------
@@ -171,6 +250,18 @@ func (d *daemonData) getVolumes(wantLabels []string) []*docker.VolumeInfo {
 		}
 	}
 	return matched
+}
+
+func (d *daemonData) removeVolume(name string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for i, v := range d.vols {
+		if v.Name == name {
+			d.vols = slices.Delete(d.vols, i, i+1)
+			return true
+		}
+	}
+	return false
 }
 
 // Images ----------------------------------------------------------------
@@ -219,4 +310,16 @@ func (d *daemonData) addImageTag(nameOrID, repoTag string) bool {
 	}
 	img.RepoTags = append(img.RepoTags, repoTag)
 	return true
+}
+
+func (d *daemonData) removeImage(nameOrID string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for i, img := range d.imgs {
+		if img.ID == nameOrID || slices.Contains(img.RepoTags, nameOrID) {
+			d.imgs = slices.Delete(d.imgs, i, i+1)
+			return true
+		}
+	}
+	return false
 }
