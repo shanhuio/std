@@ -558,6 +558,61 @@ func TestContArchive(t *testing.T) {
 	})
 }
 
+func TestInspectCont(t *testing.T) {
+	t.Run("found", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{
+			ID:    "abc123",
+			Names: []string{"/web"},
+			Image: "nginx:latest",
+		})
+
+		got, err := docker.InspectCont(d.Client, "abc123")
+		if err != nil {
+			t.Fatalf("InspectCont: %v", err)
+		}
+		if got.ID != "abc123" || got.Image != "nginx:latest" {
+			t.Errorf("got %+v", got)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		d := newDaemon(t)
+		_, err := docker.InspectCont(d.Client, "missing")
+		if err == nil {
+			t.Fatal("InspectCont: expected error, got nil")
+		}
+		if !errcode.IsNotFound(err) {
+			t.Errorf("expected NotFound, got %v", err)
+		}
+	})
+}
+
+func TestHasCont(t *testing.T) {
+	t.Run("true", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{ID: "abc123"})
+		ok, err := docker.HasCont(d.Client, "abc123")
+		if err != nil {
+			t.Fatalf("HasCont: %v", err)
+		}
+		if !ok {
+			t.Errorf("HasCont: got false, want true")
+		}
+	})
+
+	t.Run("false", func(t *testing.T) {
+		d := newDaemon(t)
+		ok, err := docker.HasCont(d.Client, "missing")
+		if err != nil {
+			t.Fatalf("HasCont: %v", err)
+		}
+		if ok {
+			t.Errorf("HasCont: got true, want false")
+		}
+	})
+}
+
 func TestContRemove(t *testing.T) {
 	t.Run("remove", func(t *testing.T) {
 		d := newDaemon(t)
