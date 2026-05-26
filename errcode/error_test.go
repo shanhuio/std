@@ -56,6 +56,38 @@ func TestAnnotate(t *testing.T) {
 	})
 }
 
+func TestAltErrorf(t *testing.T) {
+	t.Run("preserves code, replaces message", func(t *testing.T) {
+		alt := AltErrorf(
+			NotFoundf("file not found at %s", "/etc/foo"),
+			"rendered: %d", 42,
+		)
+		if !IsNotFound(alt) {
+			t.Errorf("IsNotFound: got false, want true")
+		}
+		if got := alt.Error(); got != "rendered: 42" {
+			t.Errorf("Error(): got %q, want %q", got, "rendered: 42")
+		}
+	})
+
+	t.Run("plain error has no code", func(t *testing.T) {
+		alt := AltErrorf(errors.New("oops"), "hello %s", "world")
+		if Of(alt) != "" {
+			t.Errorf("Of: got %q, want empty", Of(alt))
+		}
+		if got := alt.Error(); got != "hello world" {
+			t.Errorf("Error(): got %q, want %q", got, "hello world")
+		}
+	})
+
+	t.Run("supports errors.Is", func(t *testing.T) {
+		sentinel := errors.New("sentinel")
+		if !errors.Is(AltErrorf(sentinel, "wrapped"), sentinel) {
+			t.Errorf("errors.Is should find sentinel through AltErrorf")
+		}
+	})
+}
+
 func TestAnnotatef(t *testing.T) {
 	t.Run("format args", func(t *testing.T) {
 		annotated := Annotatef(InvalidArgf("bad value"), "parse %q", "input")
