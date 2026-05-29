@@ -24,20 +24,21 @@ const identType = 1
 // their literals.
 func lexIdents(t *testing.T, input string) []string {
 	t.Helper()
-	x := MakeLexer("test.txt", strings.NewReader(input), func(x *Lexer) *Token {
+	tokener := NewTokener("test.txt", strings.NewReader(input), func(x *Lexer) *Token {
 		return LexIdent(x, identType)
-	})
+	}, IsWhite)
+
+	toks, errs := Tokens(tokener)
+	if len(errs) != 0 {
+		t.Fatalf("unexpected lex errors: %v", errs)
+	}
 
 	var lits []string
-	for {
-		tok := x.Token()
+	for _, tok := range toks {
 		if tok.Type == EOF {
-			break
+			continue
 		}
 		lits = append(lits, tok.Lit)
-	}
-	if errs := x.Errs(); len(errs) != 0 {
-		t.Fatalf("unexpected lex errors: %v", errs)
 	}
 	return lits
 }
