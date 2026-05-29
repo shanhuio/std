@@ -144,7 +144,7 @@ func (p *Parser) SkipErrStmt(sep int) bool {
 		return false
 	}
 
-	for !p.See(sep) || p.See(EOF) {
+	for !(p.See(sep) || p.See(EOF)) {
 		p.Next()
 	}
 	if p.See(sep) {
