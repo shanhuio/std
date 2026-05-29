@@ -42,3 +42,15 @@ func TestLexComment(t *testing.T) {
 		}
 	}
 }
+
+func TestLexCommentPanicsWithoutSlash(t *testing.T) {
+	// LexComment requires a '/' already buffered as a precondition.
+	x := NewLexer("a.txt", strings.NewReader("abc"))
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("LexComment without buffered '/': got no panic, want panic")
+		}
+	}()
+	LexComment(x)
+}
