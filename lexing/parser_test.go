@@ -7,7 +7,7 @@ import (
 const tokSemi = 3
 
 func newTestParser(toks ...*Token) *Parser {
-	return NewParser(&sliceTokener{toks: toks}, NewTypes())
+	return NewParser(newStaticTokener(toks...), NewTypes())
 }
 
 func TestParserSeeAndToken(t *testing.T) {
@@ -236,7 +236,8 @@ func TestParserErrsFromTokener(t *testing.T) {
 	// When the underlying tokener has errors, Errs returns those instead of
 	// the parser's own error list.
 	lexErr := &Error{Code: "lex"}
-	src := &sliceTokener{toks: []*Token{tok(tokIdent, "a")}, errs: []*Error{lexErr}}
+	src := newStaticTokener(tok(tokIdent, "a"))
+	src.setErrors(lexErr)
 	p := NewParser(src, NewTypes())
 	p.ErrorfHere("parser-level error")
 

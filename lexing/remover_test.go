@@ -4,14 +4,21 @@ import (
 	"testing"
 )
 
-// sliceTokener emits a predefined sequence of tokens, then EOF forever.
-type sliceTokener struct {
+// staticTokener emits a predefined sequence of tokens, then EOF forever.
+type staticTokener struct {
 	toks []*Token
 	i    int
 	errs []*Error
 }
 
-func (s *sliceTokener) Token() *Token {
+func newStaticTokener(toks ...*Token) *staticTokener {
+	return &staticTokener{toks: toks}
+}
+
+// setErrors sets the error list returned by Errs.
+func (s *staticTokener) setErrors(errs ...*Error) { s.errs = errs }
+
+func (s *staticTokener) Token() *Token {
 	if s.i >= len(s.toks) {
 		return &Token{Type: EOF}
 	}
@@ -20,7 +27,7 @@ func (s *sliceTokener) Token() *Token {
 	return ret
 }
 
-func (s *sliceTokener) Errs() []*Error { return s.errs }
+func (s *staticTokener) Errs() []*Error { return s.errs }
 
 const (
 	tokIdent   = 1
@@ -30,13 +37,13 @@ const (
 func tok(typ int, lit string) *Token { return &Token{Type: typ, Lit: lit} }
 
 func TestRemover(t *testing.T) {
-	src := &sliceTokener{toks: []*Token{
+	src := newStaticTokener(
 		tok(Comment, "// a"),
 		tok(tokIdent, "foo"),
 		tok(Comment, "// b"),
 		tok(Comment, "// c"),
 		tok(tokIdent, "bar"),
-	}}
+	)
 
 	r := NewRemover(src, Comment)
 	got := TokenAll(r)
@@ -57,11 +64,11 @@ func TestRemover(t *testing.T) {
 }
 
 func TestRemoverNonComment(t *testing.T) {
-	src := &sliceTokener{toks: []*Token{
+	src := newStaticTokener(
 		tok(tokIdent, "x"),
 		tok(tokKeyword, "if"),
 		tok(tokIdent, "y"),
-	}}
+	)
 
 	r := NewRemover(src, tokKeyword)
 	got := TokenAll(r)
@@ -78,10 +85,10 @@ func TestRemoverNonComment(t *testing.T) {
 }
 
 func TestNewCommentRemover(t *testing.T) {
-	src := &sliceTokener{toks: []*Token{
+	src := newStaticTokener(
 		tok(Comment, "// drop"),
 		tok(tokIdent, "keep"),
-	}}
+	)
 
 	r := NewCommentRemover(src)
 	got := TokenAll(r)
@@ -96,7 +103,8 @@ func TestNewCommentRemover(t *testing.T) {
 
 func TestRemoverErrsRelayed(t *testing.T) {
 	wantErr := &Error{Code: "x", Err: nil}
-	src := &sliceTokener{errs: []*Error{wantErr}}
+	src := newStaticTokener()
+	src.setErrors(wantErr)
 	r := NewRemover(src, Comment)
 
 	errs := r.Errs()
@@ -111,5 +119,5 @@ func TestNewRemoverPanicsOnEOF(t *testing.T) {
 			t.Errorf("NewRemover(_, EOF): got no panic, want panic")
 		}
 	}()
-	NewRemover(&sliceTokener{}, EOF)
+	NewRemover(newStaticTokener(), EOF)
 }

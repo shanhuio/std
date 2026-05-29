@@ -20,11 +20,11 @@ func TestKeywordSet(t *testing.T) {
 }
 
 func TestKeyworder(t *testing.T) {
-	src := &sliceTokener{toks: []*Token{
+	src := newStaticTokener(
 		tok(tokIdent, "if"),
 		tok(tokIdent, "x"),
 		tok(tokIdent, "else"),
-	}}
+	)
 
 	kw := NewKeyworder(src)
 	kw.Keywords = KeywordSet("if", "else")
@@ -51,7 +51,7 @@ func TestKeyworder(t *testing.T) {
 
 func TestKeyworderNilKeywords(t *testing.T) {
 	// With no keyword set, every ident passes through unchanged.
-	src := &sliceTokener{toks: []*Token{tok(tokIdent, "if")}}
+	src := newStaticTokener(tok(tokIdent, "if"))
 	kw := NewKeyworder(src)
 	kw.Ident = tokIdent
 	kw.Keyword = tokKeyword
@@ -65,7 +65,7 @@ func TestKeyworderNilKeywords(t *testing.T) {
 func TestKeyworderNonIdentUnchanged(t *testing.T) {
 	// A token whose type is not Ident is never reclassified, even if its
 	// literal is in the keyword set.
-	src := &sliceTokener{toks: []*Token{tok(tokKeyword, "if")}}
+	src := newStaticTokener(tok(tokKeyword, "if"))
 	kw := NewKeyworder(src)
 	kw.Keywords = KeywordSet("if")
 	kw.Ident = tokIdent
@@ -79,7 +79,8 @@ func TestKeyworderNonIdentUnchanged(t *testing.T) {
 
 func TestKeyworderErrsRelayed(t *testing.T) {
 	wantErr := &Error{Code: "x"}
-	src := &sliceTokener{errs: []*Error{wantErr}}
+	src := newStaticTokener()
+	src.setErrors(wantErr)
 	kw := NewKeyworder(src)
 
 	errs := kw.Errs()
