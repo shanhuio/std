@@ -109,6 +109,26 @@ func TestErrorListPrintError(t *testing.T) {
 	}
 }
 
+// TestLogErrorWithErrorList exercises LogError against a real ErrorList, which
+// is the concrete Logger used throughout the package.
+func TestLogErrorWithErrorList(t *testing.T) {
+	lst := NewErrorList()
+	if LogError(lst, nil) {
+		t.Errorf("LogError(nil): got true, want false")
+	}
+	if len(lst.Errs()) != 0 {
+		t.Errorf("LogError(nil) should not log, got %d errors", len(lst.Errs()))
+	}
+
+	if !LogError(lst, errors.New("boom")) {
+		t.Errorf("LogError(err): got false, want true")
+	}
+	errs := lst.Errs()
+	if len(errs) != 1 || errs[0].Err.Error() != "boom" {
+		t.Errorf("LogError did not log correctly: %+v", errs)
+	}
+}
+
 func TestSingleErr(t *testing.T) {
 	errs := SingleErr(errors.New("boom"))
 	if len(errs) != 1 || errs[0].Err.Error() != "boom" || errs[0].Code != "" {
@@ -123,25 +143,3 @@ func TestSingleCodeErr(t *testing.T) {
 	}
 }
 
-func TestLogError(t *testing.T) {
-	t.Run("nil error returns false", func(t *testing.T) {
-		lst := NewErrorList()
-		if LogError(lst, nil) {
-			t.Errorf("LogError(nil): got true, want false")
-		}
-		if len(lst.Errs()) != 0 {
-			t.Errorf("LogError(nil) should not log, got %d errors", len(lst.Errs()))
-		}
-	})
-
-	t.Run("non-nil error logs and returns true", func(t *testing.T) {
-		lst := NewErrorList()
-		if !LogError(lst, errors.New("boom")) {
-			t.Errorf("LogError(err): got false, want true")
-		}
-		errs := lst.Errs()
-		if len(errs) != 1 || errs[0].Err.Error() != "boom" {
-			t.Errorf("LogError did not log correctly: %+v", errs)
-		}
-	})
-}
