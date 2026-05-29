@@ -67,10 +67,8 @@ func TestDecoder_series(t *testing.T) {
 		return nil
 	}
 	list, errs := dec.DecodeSeries(tm)
-	if errs != nil {
-		for _, err := range errs {
-			t.Error(err)
-		}
+	for _, err := range errs {
+		t.Error(err)
 	}
 
 	strVal := "string"
