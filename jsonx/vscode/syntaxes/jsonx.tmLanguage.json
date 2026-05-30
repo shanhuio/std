@@ -1,0 +1,74 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "JSONx",
+  "scopeName": "source.jsonx",
+  "patterns": [{ "include": "#value" }],
+  "repository": {
+    "value": {
+      "patterns": [
+        { "include": "#comment" },
+        { "include": "#constant" },
+        { "include": "#number" },
+        { "include": "#string" },
+        { "include": "#rawstring" },
+        { "include": "#key" },
+        { "include": "#identifier" },
+        { "include": "#punctuation" }
+      ]
+    },
+    "comment": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.jsonx",
+          "begin": "//",
+          "end": "$"
+        },
+        {
+          "name": "comment.block.jsonx",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "constant": {
+      "name": "constant.language.jsonx",
+      "match": "\\b(?:true|false|null)\\b"
+    },
+    "number": {
+      "name": "constant.numeric.jsonx",
+      "match": "[-+]?(?:0x[0-9A-Fa-f]+|\\d+(?:\\.\\d*)?(?:[eE][-+]?\\d+)?)"
+    },
+    "string": {
+      "name": "string.quoted.double.jsonx",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.jsonx",
+          "match": "\\\\(?:[\"\\\\/bfnrt]|u[0-9A-Fa-f]{4})"
+        }
+      ]
+    },
+    "rawstring": {
+      "name": "string.quoted.raw.jsonx",
+      "begin": "`",
+      "end": "`"
+    },
+    "key": {
+      "name": "support.type.property-name.jsonx",
+      "match": "\\b[A-Za-z_]\\w*\\b(?=\\s*:)"
+    },
+    "identifier": {
+      "name": "variable.other.jsonx",
+      "match": "\\b[A-Za-z_]\\w*\\b"
+    },
+    "punctuation": {
+      "patterns": [
+        { "name": "punctuation.separator.jsonx", "match": "[,;]" },
+        { "name": "punctuation.separator.key-value.jsonx", "match": ":" },
+        { "name": "punctuation.accessor.jsonx", "match": "\\." },
+        { "name": "punctuation.definition.bracket.jsonx", "match": "[\\[\\]{}]" }
+      ]
+    }
+  }
+}

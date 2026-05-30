@@ -1,0 +1,28 @@
+{
+  "name": "jsonx",
+  "displayName": "JSONx",
+  "description": "Syntax highlighting for JSONx (shanhu.io/std/jsonx), a JSON dialect with comments, unquoted keys, and Go-style raw strings.",
+  "version": "0.0.1",
+  "publisher": "shanhu",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "jsonx",
+        "aliases": ["JSONx", "jsonx"],
+        "extensions": [".jsonx"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "jsonx",
+        "scopeName": "source.jsonx",
+        "path": "./syntaxes/jsonx.tmLanguage.json"
+      }
+    ]
+  }
+}
