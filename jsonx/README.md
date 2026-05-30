@@ -80,3 +80,22 @@ typed, errs := jsonx.ReadSeriesFile("data.jsonx", func(t string) any {
     return nil
 })
 ```
+
+## Editor syntax highlighting
+
+Highlighting for `*.jsonx` files ships in two editor formats.
+
+**Vim** — copy the syntax file and point Vim at `*.jsonx`:
+
+```sh
+cp jsonx/vim/jsonx.vim ~/.vim/syntax/jsonx.vim   # ~/.config/nvim/syntax/ for Neovim
+echo 'autocmd BufRead,BufNewFile *.jsonx setfiletype jsonx' >> ~/.vimrc
+```
+
+**VS Code** — install the bundled extension, then reload the window:
+
+```sh
+cp -r jsonx/vscode ~/.vscode/extensions/shanhu.jsonx-0.0.1
+```
+
+See [`vscode/README.md`](vscode/README.md) for packaging it as a `.vsix`.
