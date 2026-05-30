@@ -53,6 +53,52 @@ func TestMarshal_loopback(t *testing.T) {
 	}
 }
 
+func TestSprint(t *testing.T) {
+	for _, test := range []struct {
+		in   any
+		want string
+	}{
+		{1234, "1234\n"},
+		{"hi", "\"hi\"\n"},
+		{true, "true\n"},
+		{nil, "null\n"},
+		{[]int{1, 2}, "[\n    1,\n    2,\n]\n"},
+		{
+			map[string]any{"a": 1, "b": "x"},
+			"{\n    a: 1,\n    b: \"x\",\n}\n",
+		},
+	} {
+		got, err := Sprint(test.in)
+		if err != nil {
+			t.Errorf("Sprint(%v): %v", test.in, err)
+			continue
+		}
+		if got != test.want {
+			t.Errorf("Sprint(%v): got %q, want %q", test.in, got, test.want)
+		}
+	}
+}
+
+func TestSprintError(t *testing.T) {
+	// A value JSON cannot marshal yields an error and an empty string.
+	got, err := Sprint(make(chan int))
+	if err == nil {
+		t.Errorf("Sprint(chan): got nil error, want one")
+	}
+	if got != "" {
+		t.Errorf("Sprint(chan): got %q, want empty string", got)
+	}
+}
+
+func ExamplePrint() {
+	Print(map[string]any{"name": "svc", "port": 8080})
+	// Output:
+	// {
+	//     name: "svc",
+	//     port: 8080,
+	// }
+}
+
 func TestWriteFile(t *testing.T) {
 	type config struct {
 		Name string
