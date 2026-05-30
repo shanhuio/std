@@ -3,6 +3,7 @@ package jsonx
 import (
 	"fmt"
 	"io"
+	"slices"
 
 	"shanhu.io/std/lexing"
 )
@@ -27,12 +28,7 @@ func (p *parser) seeOp(ops ...string) bool {
 	if t.Type != tokOperator {
 		return false
 	}
-	for _, op := range ops {
-		if t.Lit == op {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ops, t.Lit)
 }
 
 func tokenTypeStr(t *lexing.Token) string {
