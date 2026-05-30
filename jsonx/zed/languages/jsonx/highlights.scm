@@ -1,24 +1,29 @@
-(comment) @comment
+; Object keys: unquoted identifiers and quoted strings both read as property
+; names. Listed first so a key wins over the generic identifier/string rules.
+(pair
+  key: (identifier) @property)
+(pair
+  key: (string) @property)
 
+; Bare identifiers used as values (e.g. a series type tag).
+(identifier) @variable
+
+; Literals.
 (string) @string
 (raw_string) @string
 (escape_sequence) @string.escape
 (number) @number
-
-[
-  (true)
-  (false)
-] @boolean
-
+(true) @boolean
+(false) @boolean
 (null) @constant.builtin
 
-; Object keys (identifier or string before a colon).
-(pair key: (identifier) @property)
-(pair key: (string) @property)
+(comment) @comment
 
-; Other bare identifiers: dotted paths and series type names. Scoped to
-; dotted_name so this never overlaps an object key (kept as @property above).
-(dotted_name (identifier) @variable)
+[
+  ","
+  ":"
+  ";"
+] @punctuation.delimiter
 
 [
   "{"
@@ -26,10 +31,3 @@
   "["
   "]"
 ] @punctuation.bracket
-
-[
-  ":"
-  ","
-  ";"
-  "."
-] @punctuation.delimiter

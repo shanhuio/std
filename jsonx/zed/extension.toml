@@ -8,4 +8,4 @@ repository = "https://github.com/shanhuio/std"
 
 [grammars.jsonx]
 repository = "https://github.com/shanhuio/tree-sitter-jsonx"
-commit = "b2f0c831814ebfcb4bb20e1a00f62621e9865f3d"
+commit = "87e2858a7e2339c755cbf2830df400ce610e0a85"
