@@ -1,0 +1,12 @@
+name = "JSONx"
+grammar = "jsonx"
+path_suffixes = ["jsonx", "caco3"]
+line_comments = ["// "]
+block_comment = ["/* ", " */"]
+autoclose_before = ",]}"
+brackets = [
+  { start = "{", end = "}", close = true, newline = true },
+  { start = "[", end = "]", close = true, newline = true },
+  { start = "\"", end = "\"", close = true, newline = false, not_in = ["string", "comment"] },
+  { start = "`", end = "`", close = true, newline = false, not_in = ["string", "comment"] },
+]

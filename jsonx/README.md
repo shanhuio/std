@@ -83,13 +83,13 @@ typed, errs := jsonx.ReadSeriesFile("data.jsonx", func(t string) any {
 
 ## Editor syntax highlighting
 
-Highlighting for `*.jsonx` files ships in two editor formats.
+Highlighting for `*.jsonx` and `*.caco3` files ships for three editors.
 
-**Vim** — copy the syntax file and point Vim at `*.jsonx`:
+**Vim** — copy the syntax file and point Vim at the file types:
 
 ```sh
 cp jsonx/vim/jsonx.vim ~/.vim/syntax/jsonx.vim   # ~/.config/nvim/syntax/ for Neovim
-echo 'autocmd BufRead,BufNewFile *.jsonx setfiletype jsonx' >> ~/.vimrc
+echo 'autocmd BufRead,BufNewFile *.jsonx,*.caco3 setfiletype jsonx' >> ~/.vimrc
 ```
 
 **VS Code** — install the bundled extension, then reload the window:
@@ -99,3 +99,7 @@ cp -r jsonx/vscode ~/.vscode/extensions/shanhu.jsonx-0.0.1
 ```
 
 See [`vscode/README.md`](vscode/README.md) for packaging it as a `.vsix`.
+
+**Zed** — a Tree-sitter extension under [`zed/`](zed/README.md), backed by the
+[`tree-sitter-jsonx`](https://github.com/shanhuio/tree-sitter-jsonx) grammar.
+Install it via Zed's *install dev extension* command.
