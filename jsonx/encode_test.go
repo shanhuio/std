@@ -39,13 +39,6 @@ func twoEntryList() *list {
 	}}
 }
 
-func twoEntryIdentList() *identList {
-	return &identList{entries: []*lexing.Token{
-		{Type: tokIdent, Lit: "a"},
-		{Type: tokIdent, Lit: "b"},
-	}}
-}
-
 func TestEncodeValue(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -72,7 +65,6 @@ func TestEncodeValue(t *testing.T) {
 		{"object", twoEntryObject(), `{"a":1,"b":2}`},
 		{"empty list", &list{}, "[]"},
 		{"list", twoEntryList(), "[1,2]"},
-		{"ident list", twoEntryIdentList(), `["a","b"]`},
 	} {
 		var buf bytes.Buffer
 		if err := encodeValue(&buf, test.v); err != nil {
@@ -142,7 +134,6 @@ func TestEncodeWriteErrors(t *testing.T) {
 		{"float", &basic{token: &lexing.Token{Type: tokFloat, Lit: "1.5"}, value: 1.5}},
 		{"object", twoEntryObject()},
 		{"list", twoEntryList()},
-		{"ident list", twoEntryIdentList()},
 	} {
 		// Find how many writes a successful encoding performs.
 		cw := new(countWriter)

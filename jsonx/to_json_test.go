@@ -41,6 +41,9 @@ func TestScalars(t *testing.T) {
 	checkErr(t, ``)
 	// An unknown character is rejected.
 	checkErr(t, `@`)
+	// A bare or dotted identifier is not a value.
+	checkErr(t, `foo`)
+	checkErr(t, `a.b.c`)
 }
 
 // TestComments documents that both line and block comments are accepted
@@ -123,10 +126,4 @@ func TestNumbers(t *testing.T) {
 	checkOK(t, `{a:-42}`, `{"a":-42}`)
 	checkOK(t, `{a:+42}`, `{"a":42}`)
 	checkErr(t, `+x`)
-}
-
-// TestDottedIdent documents that a dotted identifier path is shorthand for an
-// array of its segments.
-func TestDottedIdent(t *testing.T) {
-	checkOK(t, `a.b.c.d`, `["a","b","c","d"]`)
 }

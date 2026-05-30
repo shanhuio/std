@@ -48,8 +48,3 @@ type listEntry struct {
 	value value
 	comma *lexing.Token
 }
-
-type identList struct {
-	entries []*lexing.Token
-	dots    []*lexing.Token
-}

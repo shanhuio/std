@@ -93,23 +93,6 @@ func encodeList(w io.Writer, v *list) error {
 	return writeString(w, "]")
 }
 
-func encodeIdentList(w io.Writer, v *identList) error {
-	if err := writeString(w, "["); err != nil {
-		return err
-	}
-	for i, entry := range v.entries {
-		if i > 0 {
-			if err := writeString(w, ","); err != nil {
-				return err
-			}
-		}
-		if err := encodeJSON(w, entry.Lit); err != nil {
-			return err
-		}
-	}
-	return writeString(w, "]")
-}
-
 func encodeValue(w io.Writer, v value) error {
 	switch v := v.(type) {
 	case *null:
@@ -130,10 +113,6 @@ func encodeValue(w io.Writer, v value) error {
 		}
 	case *list:
 		if err := encodeList(w, v); err != nil {
-			return err
-		}
-	case *identList:
-		if err := encodeIdentList(w, v); err != nil {
 			return err
 		}
 	default:

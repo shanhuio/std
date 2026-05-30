@@ -82,22 +82,6 @@ func parseListEntries(p *parser) []*listEntry {
 	return entries
 }
 
-func parseIdentList(p *parser) *identList {
-	lst := new(identList)
-	for {
-		tok := p.Expect(tokIdent)
-		if tok == nil {
-			return lst
-		}
-		lst.entries = append(lst.entries, tok)
-		if !p.seeOp(".") {
-			break
-		}
-		lst.dots = append(lst.dots, p.Shift())
-	}
-	return lst
-}
-
 func parseValue(p *parser) value {
 	switch {
 	case p.See(tokKeyword):
@@ -159,8 +143,6 @@ func parseValue(p *parser) value {
 			entries: entries,
 			right:   right,
 		}
-	case p.See(tokIdent):
-		return parseIdentList(p)
 	default:
 		t := p.Token()
 		p.CodeErrorf(
