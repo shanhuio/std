@@ -90,6 +90,74 @@ func TestSprintError(t *testing.T) {
 	}
 }
 
+func TestSprintPreservesFieldOrder(t *testing.T) {
+	// Struct fields print in declaration order, not sorted alphabetically.
+	v := struct {
+		Zebra int
+		Apple int
+		Mango int
+	}{1, 2, 3}
+
+	got, err := Sprint(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "{\n    Zebra: 1,\n    Apple: 2,\n    Mango: 3,\n}\n"
+	if got != want {
+		t.Errorf("Sprint: got %q, want %q", got, want)
+	}
+}
+
+func TestSprintNestedOrder(t *testing.T) {
+	// Order is preserved at every level of nesting.
+	type inner struct {
+		Y int
+		X int
+	}
+	v := struct {
+		Second inner
+		Items  []int
+		First  int
+	}{Second: inner{Y: 1, X: 2}, Items: []int{7, 8}, First: 3}
+
+	got, err := Sprint(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "{\n    Second: {\n        Y: 1,\n        X: 2,\n    },\n" +
+		"    Items: [\n        7,\n        8,\n    ],\n    First: 3,\n}\n"
+	if got != want {
+		t.Errorf("Sprint: got %q, want %q", got, want)
+	}
+}
+
+func TestSprintMapStillSorted(t *testing.T) {
+	// Maps have no field order; json.Marshal sorts their keys, and that order
+	// is preserved, so map output stays deterministic (sorted).
+	v := map[string]any{"b": 1, "a": 2, "c": 3}
+
+	got, err := Sprint(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "{\n    a: 2,\n    b: 1,\n    c: 3,\n}\n"
+	if got != want {
+		t.Errorf("Sprint: got %q, want %q", got, want)
+	}
+}
+
+func TestSprintLargeInt(t *testing.T) {
+	// Integers beyond 2^53 are preserved exactly, since numbers no longer pass
+	// through float64.
+	got, err := Sprint(int64(9007199254740993))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "9007199254740993\n"; got != want {
+		t.Errorf("Sprint: got %q, want %q", got, want)
+	}
+}
+
 func ExamplePrint() {
 	Print(map[string]any{"name": "svc", "port": 8080})
 	// Output:

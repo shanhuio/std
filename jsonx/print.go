@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"sort"
 	"strconv"
 )
 
@@ -25,6 +24,8 @@ func (p *printer) write(v any) {
 	switch v := v.(type) {
 	case bool:
 		io.WriteString(p.p, strconv.FormatBool(v))
+	case json.Number:
+		io.WriteString(p.p, v.String())
 	case float64:
 		s := strconv.FormatFloat(v, 'g', -1, 64)
 		io.WriteString(p.p, s)
@@ -32,7 +33,7 @@ func (p *printer) write(v any) {
 		p.writeString(v)
 	case []any:
 		p.writeArray(v)
-	case map[string]any:
+	case orderedObject:
 		p.writeObject(v)
 	case nil:
 		io.WriteString(p.p, "null")
@@ -85,33 +86,33 @@ func isIdent(s string) bool {
 	return true
 }
 
-func (p *printer) writeObjectItems(obj map[string]any) {
-	var keys []string
+func (p *printer) writeObjectItems(obj orderedObject) {
+	// Members are kept in input order; only decide whether keys can be written
+	// bare or must be quoted.
 	identKeys := true
-	for k := range obj {
-		keys = append(keys, k)
-		if !isIdent(k) {
+	for _, m := range obj {
+		if !isIdent(m.key) {
 			identKeys = false
+			break
 		}
 	}
-	sort.Strings(keys)
 
 	p.p.Tab()
 	defer p.p.ShiftTab()
 
-	for _, k := range keys {
+	for _, m := range obj {
 		if identKeys {
-			io.WriteString(p.p, k)
+			io.WriteString(p.p, m.key)
 		} else {
-			p.writeString(k)
+			p.writeString(m.key)
 		}
 		io.WriteString(p.p, ": ")
-		p.write(obj[k])
+		p.write(m.value)
 		io.WriteString(p.p, ",\n")
 	}
 }
 
-func (p *printer) writeObject(obj map[string]any) {
+func (p *printer) writeObject(obj orderedObject) {
 	if len(obj) == 0 {
 		io.WriteString(p.p, "{}")
 		return
@@ -131,8 +132,8 @@ func Fprint(w io.Writer, v any) error {
 		return err
 	}
 
-	var g any
-	if err := json.Unmarshal(bs, &g); err != nil {
+	g, err := decodeOrdered(bs)
+	if err != nil {
 		return err
 	}
 
