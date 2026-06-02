@@ -8,7 +8,7 @@
 "   ~/.config/nvim/syntax/jsonx.vim for Neovim), then tell Vim which files are
 "   JSONx, e.g. add to your vimrc:
 "
-"       autocmd BufRead,BufNewFile *.jsonx,*.caco3 setfiletype jsonx
+"       autocmd BufRead,BufNewFile *.jsonx,*.caco3,*.lets setfiletype jsonx
 
 if exists("b:current_syntax")
   finish

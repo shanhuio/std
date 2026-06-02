@@ -1,7 +1,8 @@
 # JSONx for Zed
 
 Syntax highlighting for [JSONx](../README.md) in the [Zed](https://zed.dev)
-editor. It highlights files with the `.jsonx` and `.caco3` extensions.
+editor. It highlights files with the `.jsonx`, `.caco3`, and `.lets`
+extensions.
 
 Zed highlights via [Tree-sitter](https://tree-sitter.github.io/tree-sitter/),
 so unlike the Vim and VS Code support this extension relies on a separate

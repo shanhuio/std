@@ -1,6 +1,6 @@
 name = "JSONx"
 grammar = "jsonx"
-path_suffixes = ["jsonx", "caco3"]
+path_suffixes = ["jsonx", "caco3", "lets"]
 line_comments = ["// "]
 block_comment = ["/* ", " */"]
 autoclose_before = ",]}"

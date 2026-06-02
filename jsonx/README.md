@@ -83,13 +83,14 @@ typed, errs := jsonx.ReadSeriesFile("data.jsonx", func(t string) any {
 
 ## Editor syntax highlighting
 
-Highlighting for `*.jsonx` and `*.caco3` files ships for three editors.
+Highlighting for `*.jsonx`, `*.caco3`, and `*.lets` files ships for three
+editors.
 
 **Vim** — copy the syntax file and point Vim at the file types:
 
 ```sh
 cp jsonx/vim/jsonx.vim ~/.vim/syntax/jsonx.vim   # ~/.config/nvim/syntax/ for Neovim
-echo 'autocmd BufRead,BufNewFile *.jsonx,*.caco3 setfiletype jsonx' >> ~/.vimrc
+echo 'autocmd BufRead,BufNewFile *.jsonx,*.caco3,*.lets setfiletype jsonx' >> ~/.vimrc
 ```
 
 **VS Code** — install the bundled extension, then reload the window:

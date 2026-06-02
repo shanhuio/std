@@ -13,7 +13,7 @@
       {
         "id": "jsonx",
         "aliases": ["JSONx", "jsonx"],
-        "extensions": [".jsonx", ".caco3"],
+        "extensions": [".jsonx", ".caco3", ".lets"],
         "configuration": "./language-configuration.json"
       }
     ],
