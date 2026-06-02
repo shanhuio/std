@@ -16,7 +16,7 @@ type indentWriter struct {
 }
 
 func newIndentWriter(out io.Writer) *indentWriter {
-	return &indentWriter{out: out, indentStr: "    "}
+	return &indentWriter{out: out, indentStr: "  "}
 }
 
 func (p *indentWriter) write(buf []byte) {

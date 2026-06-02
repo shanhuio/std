@@ -22,13 +22,13 @@ For example:
 
 ```jsonx
 {
-    // a friendly config
-    name: "service",
-    port: 8080,
-    tags: [
-        "a",
-        "b",
-    ],
+  // a friendly config
+  name: "service",
+  port: 8080,
+  tags: [
+    "a",
+    "b",
+  ],
 }
 ```
 

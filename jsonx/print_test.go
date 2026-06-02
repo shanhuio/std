@@ -62,10 +62,10 @@ func TestSprint(t *testing.T) {
 		{"hi", "\"hi\"\n"},
 		{true, "true\n"},
 		{nil, "null\n"},
-		{[]int{1, 2}, "[\n    1,\n    2,\n]\n"},
+		{[]int{1, 2}, "[\n  1,\n  2,\n]\n"},
 		{
 			map[string]any{"a": 1, "b": "x"},
-			"{\n    a: 1,\n    b: \"x\",\n}\n",
+			"{\n  a: 1,\n  b: \"x\",\n}\n",
 		},
 	} {
 		got, err := Sprint(test.in)
@@ -102,7 +102,7 @@ func TestSprintPreservesFieldOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "{\n    Zebra: 1,\n    Apple: 2,\n    Mango: 3,\n}\n"
+	want := "{\n  Zebra: 1,\n  Apple: 2,\n  Mango: 3,\n}\n"
 	if got != want {
 		t.Errorf("Sprint: got %q, want %q", got, want)
 	}
@@ -124,8 +124,8 @@ func TestSprintNestedOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "{\n    Second: {\n        Y: 1,\n        X: 2,\n    },\n" +
-		"    Items: [\n        7,\n        8,\n    ],\n    First: 3,\n}\n"
+	want := "{\n  Second: {\n    Y: 1,\n    X: 2,\n  },\n" +
+		"  Items: [\n    7,\n    8,\n  ],\n  First: 3,\n}\n"
 	if got != want {
 		t.Errorf("Sprint: got %q, want %q", got, want)
 	}
@@ -140,7 +140,7 @@ func TestSprintMapStillSorted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "{\n    a: 2,\n    b: 1,\n    c: 3,\n}\n"
+	want := "{\n  a: 2,\n  b: 1,\n  c: 3,\n}\n"
 	if got != want {
 		t.Errorf("Sprint: got %q, want %q", got, want)
 	}
@@ -162,8 +162,8 @@ func ExamplePrint() {
 	Print(map[string]any{"name": "svc", "port": 8080})
 	// Output:
 	// {
-	//     name: "svc",
-	//     port: 8080,
+	//   name: "svc",
+	//   port: 8080,
 	// }
 }
 
