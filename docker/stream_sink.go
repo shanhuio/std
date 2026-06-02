@@ -22,8 +22,9 @@ type streamMessage struct {
 	Stream         string          `json:"stream,omitempty"`
 	ProgressDetail *progressDetail `json:"progressDetail,omitempty"`
 
-	Status string `json:"status,omitempty"`
-	Error  string `json:"error,omitempty"`
+	Status string          `json:"status,omitempty"`
+	Error  string          `json:"error,omitempty"`
+	Aux    json.RawMessage `json:"aux,omitempty"`
 }
 
 type streamSink struct {
@@ -99,6 +100,7 @@ func printStreamMessage(r io.ReadCloser, out io.Writer) error {
 	var streamErr error
 
 	p := &progressPrinter{out: out}
+	seen := make(map[string]bool) // BuildKit steps already announced
 	dec := json.NewDecoder(r)
 	for dec.More() {
 		m := new(streamMessage)
@@ -110,6 +112,10 @@ func printStreamMessage(r io.ReadCloser, out io.Writer) error {
 				log.Println(streamErr)
 			}
 			streamErr = errcode.Add(errcode.Internal, errors.New(m.Error))
+		}
+		if m.ID == buildKitTraceID && len(m.Aux) > 0 {
+			printBuildKitTrace(out, m.Aux, seen)
+			continue
 		}
 		p.Print(m)
 	}

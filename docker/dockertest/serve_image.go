@@ -122,17 +122,12 @@ func serveBuild(d *FakeDaemon, w http.ResponseWriter, r *http.Request) {
 
 	setJSONContentType(w)
 	enc := json.NewEncoder(w)
-	d.data.recordErr(enc.Encode(map[string]string{
-		"stream": "Step 1/1 : FROM scratch\n",
-	}))
-	d.data.recordErr(enc.Encode(map[string]string{
-		"stream": "Successfully built " + id + "\n",
-	}))
-	if tag != "" {
-		d.data.recordErr(enc.Encode(map[string]string{
-			"stream": "Successfully tagged " + tag + "\n",
-		}))
-	}
+	// BuildKit (version=2) reports progress as moby.buildkit.trace messages
+	// whose aux field carries a StatusResponse proto, not legacy stream lines.
+	d.data.recordErr(enc.Encode(buildKitTrace("[1/1] FROM scratch", "")))
+	d.data.recordErr(enc.Encode(buildKitTrace(
+		"exporting to image", "exported image "+id+"\n",
+	)))
 }
 
 func serveSaveImages(d *FakeDaemon, w http.ResponseWriter, r *http.Request) {
