@@ -369,6 +369,8 @@ func TestBuildImage(t *testing.T) {
 		if _, err := docker.InspectImage(d.Client, "myimage:latest"); err != nil {
 			t.Errorf("InspectImage after build: %v", err)
 		}
+		// The fake rejects any build that is not version=2, so a successful
+		// build confirms the client selected the BuildKit builder.
 	})
 
 	t.Run("from tarutil.Stream", func(t *testing.T) {

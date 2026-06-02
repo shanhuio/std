@@ -99,6 +99,14 @@ func serveLoadImages(d *FakeDaemon, w http.ResponseWriter, r *http.Request) {
 
 func serveBuild(d *FakeDaemon, w http.ResponseWriter, r *http.Request) {
 	tag := r.URL.Query().Get("t")
+	if v := r.URL.Query().Get("version"); v != "2" {
+		http.Error(
+			w,
+			fmt.Sprintf("build requires BuildKit (version=2), got version=%q", v),
+			http.StatusBadRequest,
+		)
+		return
+	}
 	if _, err := io.Copy(io.Discard, r.Body); err != nil {
 		d.data.recordErr(fmt.Errorf("read build body: %w", err))
 		http.Error(w, "read body", http.StatusBadRequest)

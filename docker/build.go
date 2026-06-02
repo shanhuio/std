@@ -33,6 +33,8 @@ func BuildImageStream(c *Client, tag string, files *tarutil.Stream) error {
 func BuildImageConfig(c *Client, tag string, config *BuildConfig) error {
 	q := make(url.Values)
 	q.Add("t", tag)
+	// version=2 selects the BuildKit builder instead of the legacy one.
+	q.Add("version", "2")
 	if !config.UseCache {
 		q.Add("nocache", "true")
 	}
