@@ -2,7 +2,7 @@ id = "jsonx"
 name = "JSONx"
 version = "0.2.0"
 schema_version = 1
-authors = ["Shanhu <dev@shanhu.io>"]
+authors = ["Shanhu Tech Inc. <contact@shanhu.io>"]
 description = "Syntax highlighting for JSONx, a JSON dialect (shanhu.io/std/jsonx)."
 repository = "https://github.com/shanhuio/std"
 
