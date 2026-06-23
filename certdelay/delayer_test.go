@@ -2,6 +2,9 @@ package certdelay
 
 import (
 	"crypto/tls"
+	"crypto/x509"
+	"errors"
+	"math/big"
 	"testing"
 	"time"
 )
@@ -76,5 +79,49 @@ func TestDelayerToGetterConfig(t *testing.T) {
 				t.Errorf("sleep: got non-nil, want nil")
 			}
 		})
+	}
+}
+
+func TestWrap(t *testing.T) {
+	sentinel := new(tls.Certificate)
+	// A cert whose NotBefore is well before now sits outside the default
+	// window, so Wrap's default Delayer passes it straight through without
+	// the (real, 2s) delay -- keeping the test fast.
+	sentinel.Leaf = &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		NotBefore:    time.Now().Add(-24 * time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+	}
+
+	called := false
+	f := func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		called = true
+		return sentinel, nil
+	}
+
+	wrapped := Wrap(f)
+	hello := &tls.ClientHelloInfo{ServerName: "example.com"}
+	cert, err := wrapped(hello)
+	if err != nil {
+		t.Fatal("wrapped get: ", err)
+	}
+	if !called {
+		t.Error("wrapped function was not called")
+	}
+	if cert != sentinel {
+		t.Errorf("got cert %p, want %p", cert, sentinel)
+	}
+}
+
+func TestWrapPropagatesError(t *testing.T) {
+	wantErr := errors.New("boom")
+	f := func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		return nil, wantErr
+	}
+
+	wrapped := Wrap(f)
+	hello := &tls.ClientHelloInfo{ServerName: "example.com"}
+	if _, err := wrapped(hello); !errors.Is(err, wantErr) {
+		t.Errorf("got error %v, want %v", err, wantErr)
 	}
 }

@@ -45,3 +45,9 @@ func (d *Delayer) Wrap(f GetCertificateFunc) GetCertificateFunc {
 	g := newGetter(f, d.toGetterConfig())
 	return g.get
 }
+
+// Wrap returns f wrapped to apply the default delay behavior to newly issued
+// certificates. It is a shorthand for (&Delayer{}).Wrap(f).
+func Wrap(f GetCertificateFunc) GetCertificateFunc {
+	return (&Delayer{}).Wrap(f)
+}
