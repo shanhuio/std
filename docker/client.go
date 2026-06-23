@@ -29,26 +29,26 @@ func NewUnixClient(sock string) *Client {
 }
 
 func (c *Client) call(
-	p string, q url.Values, req, resp interface{},
+	p string, q url.Values, req, resp any,
 ) error {
 	return c.jsonCall(p, q, req, resp)
 }
 
 func (c *Client) jsonCall(
-	p string, q url.Values, req, resp interface{},
+	p string, q url.Values, req, resp any,
 ) error {
 	u := apiURLQuery(p, q)
 	return c.client.call(u, req, resp)
 }
 
 func (c *Client) jsonPost(
-	p string, q url.Values, req interface{}, w io.Writer,
+	p string, q url.Values, req any, w io.Writer,
 ) error {
 	u := apiURLQuery(p, q)
 	return c.client.jsonPost(u, req, w)
 }
 
-func (c *Client) jsonGet(p string, q url.Values, resp interface{}) error {
+func (c *Client) jsonGet(p string, q url.Values, resp any) error {
 	u := apiURLQuery(p, q)
 	return c.client.jsonGet(u, resp)
 }

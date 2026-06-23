@@ -51,15 +51,13 @@ func NewServer(domain string, handler http.Handler) (*Server, error) {
 		tlsConfigs: tlsConfigs,
 	}
 
-	s.serveWait.Add(1)
-	go func() {
-		defer s.serveWait.Done()
+	s.serveWait.Go(func() {
 		if err := server.ServeTLS(lis, "", ""); err != nil {
 			if err != http.ErrServerClosed {
 				log.Printf("serve tls got error: %s", err)
 			}
 		}
-	}()
+	})
 
 	return s, nil
 }

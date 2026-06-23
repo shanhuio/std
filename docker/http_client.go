@@ -125,7 +125,7 @@ func (c *httpClient) getInto(p string, w io.Writer) (int64, error) {
 	return io.Copy(w, resp.Body)
 }
 
-func (c *httpClient) jsonGet(p string, resp interface{}) error {
+func (c *httpClient) jsonGet(p string, resp any) error {
 	req, err := c.reqJSON(http.MethodGet, p, nil)
 	if err != nil {
 		return nil
@@ -158,7 +158,7 @@ func (c *httpClient) post(p string, r io.Reader, w io.Writer) error {
 	return copyRespBody(resp, w)
 }
 
-func (c *httpClient) postJSON(ctx context.Context, p string, req interface{}) (
+func (c *httpClient) postJSON(ctx context.Context, p string, req any) (
 	*http.Response, error,
 ) {
 	bs, err := json.Marshal(req)
@@ -172,7 +172,7 @@ func (c *httpClient) postJSON(ctx context.Context, p string, req interface{}) (
 	return c.do(ctx, httpReq)
 }
 
-func (c *httpClient) jsonPost(p string, req interface{}, w io.Writer) error {
+func (c *httpClient) jsonPost(p string, req any, w io.Writer) error {
 	resp, err := c.postJSON(context.TODO(), p, req)
 	if err != nil {
 		return err
@@ -180,7 +180,7 @@ func (c *httpClient) jsonPost(p string, req interface{}, w io.Writer) error {
 	return copyRespBody(resp, w)
 }
 
-func (c *httpClient) call(p string, req, resp interface{}) error {
+func (c *httpClient) call(p string, req, resp any) error {
 	httpResp, err := c.postJSON(context.TODO(), p, req)
 	if err != nil {
 		return err
