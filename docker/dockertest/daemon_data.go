@@ -412,16 +412,21 @@ func (d *daemonData) createExec(idOrName string, cmd []string) string {
 	return id
 }
 
-// startExec marks the exec as finished and returns the configured response
-// to write. Returns (resp, true) if found, (_, false) otherwise.
+// startExec marks the exec as finished and returns the response to write:
+// the container's ExecFunc result when set, otherwise the daemon's global
+// response. Returns (resp, true) if found, (_, false) otherwise.
 func (d *daemonData) startExec(execID string) (ExecResponse, bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	for _, e := range d.execs {
 		if e.ID == execID {
+			resp := d.execResp
+			if c := d.findContainer(e.ContainerID); c != nil && c.ExecFunc != nil {
+				resp = c.ExecFunc(e.Cmd)
+			}
 			e.Running = false
-			e.ExitCode = d.execResp.ExitCode
-			return d.execResp, true
+			e.ExitCode = resp.ExitCode
+			return resp, true
 		}
 	}
 	return ExecResponse{}, false

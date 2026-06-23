@@ -375,6 +375,70 @@ func TestContExec(t *testing.T) {
 			t.Errorf("expected NotFound, got %v", err)
 		}
 	})
+
+	t.Run("ExecFunc overrides global response", func(t *testing.T) {
+		d := newDaemon(t)
+		var gotCmd []string
+		d.AddContainer(&dockertest.Container{
+			ID: "abc",
+			ExecFunc: func(cmd []string) dockertest.ExecResponse {
+				gotCmd = cmd
+				return dockertest.ExecResponse{Stdout: "from-func\n", ExitCode: 7}
+			},
+		})
+		// A global response is set too, to prove the per-container ExecFunc
+		// takes precedence over it.
+		d.SetExecResponse(dockertest.ExecResponse{Stdout: "global\n", ExitCode: 1})
+
+		var stdout, stderr bytes.Buffer
+		code, err := docker.NewCont(d.Client, "abc").ExecWithSetup(&docker.ExecSetup{
+			Cmd:    []string{"echo", "hi"},
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+		if err != nil {
+			t.Fatalf("ExecWithSetup: %v", err)
+		}
+		if code != 7 {
+			t.Errorf("exit code: got %d, want 7", code)
+		}
+		if stdout.String() != "from-func\n" {
+			t.Errorf("stdout: got %q, want %q", stdout.String(), "from-func\n")
+		}
+		if len(gotCmd) != 2 || gotCmd[0] != "echo" || gotCmd[1] != "hi" {
+			t.Errorf("ExecFunc cmd: got %q, want [echo hi]", gotCmd)
+		}
+	})
+
+	t.Run("ExecFunc varies output by command", func(t *testing.T) {
+		d := newDaemon(t)
+		d.AddContainer(&dockertest.Container{
+			ID: "abc",
+			ExecFunc: func(cmd []string) dockertest.ExecResponse {
+				if len(cmd) > 0 && cmd[0] == "false" {
+					return dockertest.ExecResponse{Stderr: "nope\n", ExitCode: 1}
+				}
+				return dockertest.ExecResponse{Stdout: "ok\n"}
+			},
+		})
+		c := docker.NewCont(d.Client, "abc")
+
+		code, err := c.Exec("true")
+		if err != nil {
+			t.Fatalf("Exec true: %v", err)
+		}
+		if code != 0 {
+			t.Errorf("true exit code: got %d, want 0", code)
+		}
+
+		code, err = c.Exec("false")
+		if err != nil {
+			t.Fatalf("Exec false: %v", err)
+		}
+		if code != 1 {
+			t.Errorf("false exit code: got %d, want 1", code)
+		}
+	})
 }
 
 func TestContFollowLogs(t *testing.T) {

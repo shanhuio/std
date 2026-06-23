@@ -27,6 +27,16 @@ type Container struct {
 	// from the /logs endpoint.
 	LogStdout string
 	LogStderr string
+
+	// ExecFunc, when non-nil, is called to emulate each Cont.Exec on this
+	// container; cmd is the exec's command. Its returned ExecResponse
+	// supplies the stdout, stderr, and exit code. When nil, the daemon's
+	// global response set via FakeDaemon.SetExecResponse is used instead.
+	//
+	// ExecFunc is invoked while the daemon's internal mutex is held, so it
+	// must not call back into the FakeDaemon (doing so would deadlock). It
+	// should simply compute a response from cmd and return.
+	ExecFunc func(cmd []string) ExecResponse
 }
 
 // ContainerMount is one mount on a Container, exposed under
