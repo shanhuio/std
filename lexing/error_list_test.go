@@ -142,4 +142,3 @@ func TestSingleCodeErr(t *testing.T) {
 		t.Errorf("SingleCodeErr: got %+v", errs)
 	}
 }
-

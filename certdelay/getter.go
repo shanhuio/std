@@ -186,4 +186,3 @@ func (g *getter) get(hello *tls.ClientHelloInfo) (
 	}
 	return cert, nil
 }
-
