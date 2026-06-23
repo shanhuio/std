@@ -15,13 +15,13 @@ func TestDelayerToGetterConfig(t *testing.T) {
 
 	for _, c := range []struct {
 		name        string
-		d           Delayer
+		d           *Delayer
 		wantCertHit bool
 	}{
-		{name: "zero", d: Delayer{}},
+		{name: "zero", d: &Delayer{}},
 		{
 			name: "durations",
-			d: Delayer{
+			d: &Delayer{
 				NewCertDelay:  5 * time.Second,
 				NewCertMature: 7 * time.Second,
 				NewCertWindow: 4 * time.Hour,
@@ -29,12 +29,12 @@ func TestDelayerToGetterConfig(t *testing.T) {
 		},
 		{
 			name:        "with-certForDomain",
-			d:           Delayer{CertForDomain: withCert},
+			d:           &Delayer{CertForDomain: withCert},
 			wantCertHit: true,
 		},
 		{
 			name: "all-fields",
-			d: Delayer{
+			d: &Delayer{
 				NewCertDelay:  5 * time.Second,
 				NewCertMature: 7 * time.Second,
 				NewCertWindow: 4 * time.Hour,
