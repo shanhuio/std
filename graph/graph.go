@@ -1,11 +1,3 @@
-// Package graph provides a data structure for storing a directed graph of
-// uniquely named nodes.
-//
-// Graph is plain data, meant for storage and JSON serialization. To construct
-// a valid Graph, use a Builder, which enforces that node names are unique and
-// that every edge references existing nodes. To query a Graph efficiently, wrap
-// it in a Viewer, which builds adjacency indexes once so lookups avoid linear
-// scans.
 package graph
 
 // Node is a vertex in a Graph. Name uniquely identifies the node within its
