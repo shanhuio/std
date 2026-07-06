@@ -63,6 +63,17 @@ func TestViewerLookups(t *testing.T) {
 	}
 }
 
+func TestViewerGraph(t *testing.T) {
+	g := buildSample(t)
+	v, err := NewViewer(g)
+	if err != nil {
+		t.Fatal("NewViewer: ", err)
+	}
+	if got := v.Graph(); got != g {
+		t.Errorf("Graph(): got %p, want %p", got, g)
+	}
+}
+
 func TestViewerNodesOrder(t *testing.T) {
 	b := NewBuilder()
 	for _, name := range []string{"c", "a", "b"} {
