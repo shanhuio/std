@@ -6,6 +6,7 @@ import "fmt"
 // are unique and that every edge references existing nodes, maintaining
 // internal indexes so these checks are O(1).
 type Builder struct {
+	name  string
 	nodes []*Node
 	edges []*Edge
 
@@ -20,6 +21,9 @@ func NewBuilder() *Builder {
 		edgeSet: make(map[string]map[string]bool),
 	}
 }
+
+// SetName sets the title of the graph being built. The default is empty.
+func (b *Builder) SetName(name string) { b.name = name }
 
 // HasNode reports whether a node with the given name has been added.
 func (b *Builder) HasNode(name string) bool {
@@ -72,7 +76,7 @@ func (b *Builder) AddEdge(from, to string) error {
 // order they were added. The returned Graph is valid and independent of the
 // Builder: continuing to use the Builder afterwards does not affect it.
 func (b *Builder) Build() *Graph {
-	g := &Graph{}
+	g := &Graph{Name: b.name}
 	if len(b.nodes) > 0 {
 		g.Nodes = make([]*Node, len(b.nodes))
 		copy(g.Nodes, b.nodes)

@@ -111,6 +111,18 @@ func TestBuilderAddEdgeSelfLoop(t *testing.T) {
 	}
 }
 
+func TestBuilderSetName(t *testing.T) {
+	b := NewBuilder()
+	if g := b.Build(); g.Name != "" {
+		t.Errorf("default name: got %q, want empty", g.Name)
+	}
+
+	b.SetName("my graph")
+	if g := b.Build(); g.Name != "my graph" {
+		t.Errorf("Name after SetName: got %q, want %q", g.Name, "my graph")
+	}
+}
+
 func TestBuilderBuildIsIndependent(t *testing.T) {
 	b := NewBuilder()
 	if _, err := b.AddNode("a", ""); err != nil {
