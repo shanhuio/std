@@ -8,6 +8,7 @@ import (
 
 func sampleGraph() *Graph {
 	return &Graph{
+		Name: "sample",
 		Nodes: []*Node{
 			{Name: "a", Comment: "node a"},
 			{Name: "b"},

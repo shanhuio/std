@@ -21,6 +21,9 @@ type Edge struct {
 // other means (such as unmarshalling from an untrusted source) may not be;
 // NewViewer reports such problems.
 type Graph struct {
+	// Name is an optional title for the graph.
+	Name string `json:"name,omitempty"`
+
 	Nodes []*Node `json:"nodes,omitempty"`
 	Edges []*Edge `json:"edges,omitempty"`
 }
